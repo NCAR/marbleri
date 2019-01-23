@@ -1,12 +1,21 @@
 import xarray as xr
 from os.path import exists
 from keras.utils import Sequence
+import numpy as np
+import re
+
 
 class HWRFStep(object):
     def __init__(self, filename):
         if not exists(filename):
             raise FileNotFoundError(filename + " not found.")
         self.filename = filename
+        filename_components = self.filename.split("/")[-1].split(".")
+        name_number_split = re.search("[0-9]", filename_components[0]).start()
+        self.storm_name = filename_components[0][:name_number_split]
+        self.storm_number = filename_components[0][name_number_split:]
+        self.run_date = filename_components[1]
+        self.forecast_hour = filename_components[2][1:]
         self.ds = xr.open_dataset(filename)
         self.levels = self.ds["lv_ISBL0"].values
 
@@ -49,7 +58,7 @@ class HWRFSequence(Sequence):
         return np.ceil(len(self.hwrf_files) / self.batch_size)
 
     def __get_item__(self, idx):
-        
+        return
 
 
 
