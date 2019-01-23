@@ -1,6 +1,6 @@
 import xarray as xr
 from os.path import exists
-
+from keras.utils import Sequence
 
 class HWRFStep(object):
     def __init__(self, filename):
@@ -39,7 +39,17 @@ class HWRFStep(object):
         self.ds.close()
 
 
+class HWRFSequence(Sequence):
+    def __init__(self, hwrf_files, best_track_files, batch_size):
+        self.hwrf_files = hwrf_files
+        self.best_track_files = best_track_files
+        self.batch_size = batch_size
 
+    def __len__(self):
+        return np.ceil(len(self.hwrf_files) / self.batch_size)
+
+    def __get_item__(self, idx):
+        
 
 
 
