@@ -13,7 +13,7 @@ class HWRFStep(object):
         filename_components = self.filename.split("/")[-1].split(".")
         name_number_split = re.search("[0-9]", filename_components[0]).start()
         self.storm_name = filename_components[0][:name_number_split]
-        self.storm_number = filename_components[0][name_number_split:]
+        self.storm_number = filename_components[0][name_number_split:].replace("l", "")
         if "e" in self.storm_number:
             self.basin = "e"
             self.storm_number = self.storm_number[:-1]
@@ -81,7 +81,7 @@ class BestTrackNetCDF(object):
         fh_index = np.where(self.bt_ds[basin]["TIME"] == forecast_hour)[0][0]
         bt_values = np.zeros((1, len(variables)))
         for v, variable in enumerate(variables):
-            bt_values[v] = self.bt_ds[basin][variable][fh_index, run_index].values
+            bt_values[0, v] = self.bt_ds[basin][variable][fh_index, run_index].values
         return bt_values
 
     def close(self):
@@ -97,7 +97,7 @@ class HWRFSequence(Sequence):
     """
     def __init__(self, hwrf_files, best_track, hwrf_variables, hwrf_variable_levels,
                  best_track_input_variables, best_track_label_variables, batch_size,
-                 x_start=0, x_end=601):
+                 x_start=0, x_end=601, shuffle=True):
         self.hwrf_files = hwrf_files
         self.best_track = best_track
         self.hwrf_variables = hwrf_variables
@@ -108,27 +108,47 @@ class HWRFSequence(Sequence):
         self.batch_size = batch_size
         self.x_subset = (x_start, x_end)
         self.x_size = x_end - x_start
-
+        self.shuffle = True
+        self.indexes = np.arange(len(self.hwrf_files))
+        self.on_epoch_end()
 
     def __len__(self):
-        return np.ceil(len(self.hwrf_files) / self.batch_size)
+        return int(np.floor(len(self.hwrf_files) / self.batch_size))
 
-    def __get_item__(self, idx):
-        hwrf_file = self.hwrf_files[idx]
-        hwrf_patch = np.zeros((1, self.x_size, self.x_size, self.num_hwrf_variables), dtype=np.float32)
-        hwrf_data = HWRFStep(hwrf_file)
-        for v, variable in enumerate(self.hwrf_variables):
-            hwrf_patch[0, :, :, v] = hwrf_data.get_variable(variable, level=self.hwrf_variable_levels[v],
+    def __getitem__(self, index):
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+
+        # Generate data
+        X, y = self.__data_generation(indexes)
+        return X, y
+
+    def on_epoch_end(self):
+        self.indexes = np.arange(len(self.hwrf_files))
+        if self.shuffle:
+            np.random.shuffle(self.indexes)
+
+    def __data_generation(self, index_list_temp):
+        all_hwrf_patches = []
+        all_best_track_input_data = []
+        all_best_track_label_data = []
+        for idx in index_list_temp:
+            hwrf_file = self.hwrf_files[idx]
+            print(idx, hwrf_file)
+            hwrf_patch = np.zeros((1, self.x_size, self.x_size, self.num_hwrf_variables), dtype=np.float32)
+            hwrf_data = HWRFStep(hwrf_file)
+            for v, variable in enumerate(self.hwrf_variables):
+                hwrf_patch[0, :, :, v] = hwrf_data.get_variable(variable, level=self.hwrf_variable_levels[v],
                                                             subset=self.x_subset)
-        hwrf_data.close()
-        best_track_input_data = self.best_track.get_storm_variables(self.best_track_input_variables,
+            hwrf_data.close()
+            best_track_input_data = self.best_track.get_storm_variables(self.best_track_input_variables,
                                             hwrf_data.run_date, hwrf_data.storm_name, hwrf_data.storm_number,
                                             hwrf_data.basin, hwrf_data.forecast_hour)
-        best_track_label_data = self.best_track.get_storm_variables(self.best_track_input_variables,
+            best_track_label_data = self.best_track.get_storm_variables(self.best_track_label_variables,
                                                                     hwrf_data.run_date, hwrf_data.storm_name,
                                                                     hwrf_data.storm_number,
                                                                     hwrf_data.basin, hwrf_data.forecast_hour)
-        return [hwrf_data, best_track_input_data], best_track_label_data
-
-
+            all_hwrf_patches.append(hwrf_patch)
+            all_best_track_input_data.append(best_track_input_data)
+            all_best_track_label_data.append(best_track_label_data)
+        return [np.concatenate(all_hwrf_patches,axis=0), np.concatenate(all_best_track_input_data, axis=0)], np.concatenate(all_best_track_label_data, axis=0)
 

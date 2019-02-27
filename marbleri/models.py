@@ -1,5 +1,5 @@
 from keras.layers import Dense, Conv2D, Activation, Input, Flatten, AveragePooling2D, MaxPool2D, LeakyReLU, Dropout, Add
-from keras.layers import BatchNormalization
+from keras.layers import BatchNormalization, Concatenate
 from keras.models import Model
 from keras.optimizers import Adam, SGD
 import numpy as np
@@ -49,7 +49,7 @@ class StandardConvNet(object):
         self.model = None
         self.verbose = verbose
 
-    def build_network(self, input_shape, output_size):
+    def build_network(self, conv_input_shape, scalar_input_shape, output_size):
         """
         Create a keras model with the hyperparameters specified in the constructor.
 
@@ -57,10 +57,12 @@ class StandardConvNet(object):
             input_shape (tuple of shape [y, x, variables]): The shape of the input data
             output_size: Number of neurons in output layer.
         """
-        input_layer = Input(shape=input_shape, name="scn_input")
-        num_conv_layers = int(np.log2(input_shape[1]) - np.log2(self.min_data_width))
+        input_layer = Input(shape=conv_input_shape, name="scn_input")
+        scalar_input_layer = Input(shape=scalar_input_shape, name="scn_scalar_input")
+        scn_scalar_model = BatchNormalization()(scalar_input_layer)
+        num_conv_layers = int(np.log2(conv_input_shape[1]) - np.log2(self.min_data_width))
         num_filters = self.min_filters
-        scn_model = input_layer
+        scn_model = BatchNormalization()(input_layer)
         for c in range(num_conv_layers):
             scn_model = Conv2D(num_filters, (self.filter_width, self.filter_width),
                                padding="same", name="conv_{0:02d}".format(c))(scn_model)
@@ -74,11 +76,12 @@ class StandardConvNet(object):
             else:
                 scn_model = AveragePooling2D(name="pooling_{0:02d}".format(c))(scn_model)
         scn_model = Flatten(name="flatten")(scn_model)
+        scn_model = Concatenate()([scn_model, scn_scalar_model])
         if self.use_dropout:
             scn_model = Dropout(self.dropout_alpha, name="dense_dropout")(scn_model)
         scn_model = Dense(output_size, name="dense_output")(scn_model)
         scn_model = Activation(self.output_activation, name="activation_output")(scn_model)
-        self.model = Model(input_layer, scn_model)
+        self.model = Model([input_layer, scalar_input_layer], scn_model)
 
     def compile_model(self):
         """
@@ -165,12 +168,14 @@ class ResNet(StandardConvNet):
         out = Add()([y, x])
         return out
 
-    def build_network(self, input_shape, output_size):
+    def build_network(self, conv_input_shape, scalar_input_shape, output_size):
         input_layer = Input(shape=input_shape, name="scn_input")
-        num_conv_layers = int(np.log2(input_shape[1]) - np.log2(self.min_data_width))
+        scalar_input_layer = Input(shape=scalar_input_shape, name="scn_scalar_input")
+        scn_scalar_model = BatchNormalization()(scalar_input_layer)
+        num_conv_layers = int(np.log2(conv_input_shape[1]) - np.log2(self.min_data_width))
         print(num_conv_layers)
         num_filters = self.min_filters
-        res_model = input_layer
+        res_model = BatchNormalization()(input_layer)
         for c in range(num_conv_layers):
             res_model = self.residual_block(num_filters, res_model, c)
             num_filters = int(num_filters * self.filter_growth_rate)
@@ -179,8 +184,9 @@ class ResNet(StandardConvNet):
             else:
                 res_model = AveragePooling2D(name="pooling_{0:02d}".format(c))(res_model)
         res_model = Flatten(name="flatten")(res_model)
+        res_model = Concatenate()([res_model, scn_scalar_model])
         if self.use_dropout:
             res_model = Dropout(self.dropout_alpha, name="dense_dropout")(res_model)
         res_model = Dense(output_size, name="dense_output")(res_model)
         res_model = Activation(self.output_activation, name="activation_output")(res_model)
-        self.model = Model(input_layer, res_model)
+        self.model = Model([input_layer, scalar_input_layer], res_model)
