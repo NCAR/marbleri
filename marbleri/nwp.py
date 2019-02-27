@@ -20,7 +20,7 @@ class HWRFStep(object):
         else:
             self.basin = "l"
         self.run_date = filename_components[1]
-        self.forecast_hour = filename_components[2][1:]
+        self.forecast_hour = int(filename_components[2][1:])
         self.ds = xr.open_dataset(filename)
         self.levels = self.ds["lv_ISBL0"].values
 
@@ -69,6 +69,9 @@ class BestTrackNetCDF(object):
         self.run_columns = ["DATE", "STNAM", "STNUM", "BASIN"]
         for basin in self.bt_ds.keys():
             self.bt_runs[basin] = self.bt_ds[basin][self.run_columns].to_dataframe()
+            for col in self.bt_runs[basin].columns:
+                self.bt_runs[basin][col] = self.bt_runs[basin].str.strip().str.decode("utf-8")
+
 
     def get_storm_variables(self, variables, run_date, storm_name, storm_number, basin, forecast_hour):
         b_runs = self.bt_runs[basin]
