@@ -34,7 +34,7 @@ class HWRFStep(object):
             subset_y = slice(subset[0], subset[1])
             subset_x = slice(subset[0], subset[1])
         if level is None:
-            if len(self.ds.variable.shape) == 3:
+            if len(self.ds.variables[variable_name].shape) == 3:
                 level_index = 0
             else:
                 level_index = -1
