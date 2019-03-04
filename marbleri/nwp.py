@@ -6,7 +6,7 @@ import re
 
 
 class HWRFStep(object):
-    def __init__(self, filename):
+    def __init__(self, filename, decode_cf=False, decode_times=False, decode_coords=False):
         if not exists(filename):
             raise FileNotFoundError(filename + " not found.")
         self.filename = filename
@@ -21,7 +21,7 @@ class HWRFStep(object):
             self.basin = "l"
         self.run_date = filename_components[1]
         self.forecast_hour = int(filename_components[2][1:])
-        self.ds = xr.open_dataset(filename)
+        self.ds = xr.open_dataset(filename, decode_cf=decode_cf, decode_times=decode_times, decode_coords=decode_coords)
         self.levels = self.ds["lv_ISBL0"].values
 
     def get_variable(self, variable_name, level=None, subset=None):
@@ -77,11 +77,14 @@ class BestTrackNetCDF(object):
         b_runs = self.bt_runs[basin]
         run_index = np.where((b_runs["DATE"] == run_date) &
                              (b_runs["STNAM"] == storm_name) &
-                             (b_runs["STNUM"] == storm_number))[0][0]
-        fh_index = np.where(self.bt_ds[basin]["TIME"] == forecast_hour)[0][0]
+                             (b_runs["STNUM"] == storm_number))[0]
+        fh_index = np.where(self.bt_ds[basin]["TIME"] == forecast_hour)[0]
+        
         bt_values = np.zeros((1, len(variables)))
-        for v, variable in enumerate(variables):
-            bt_values[0, v] = self.bt_ds[basin][variable][fh_index, run_index].values
+        if len(run_index) > 0 and len(fh_index) > 0: 
+            for v, variable in enumerate(variables):
+                bt_values[0, v] = self.bt_ds[basin][variable][fh_index[0], run_index[0]].values
+        bt_values[np.isnan(bt_values)] = 0
         return bt_values
 
     def close(self):
@@ -104,7 +107,9 @@ class HWRFSequence(Sequence):
         self.hwrf_variable_levels = hwrf_variable_levels
         self.num_hwrf_variables = len(self.hwrf_variables)
         self.best_track_input_variables = best_track_input_variables
+        self.num_best_track_input_variables = len(best_track_input_variables)
         self.best_track_label_variables = best_track_label_variables
+        self.num_best_track_label_variables = len(best_track_label_variables)
         self.batch_size = batch_size
         self.x_subset = (x_start, x_end)
         self.x_size = x_end - x_start
@@ -128,27 +133,23 @@ class HWRFSequence(Sequence):
             np.random.shuffle(self.indexes)
 
     def __data_generation(self, index_list_temp):
-        all_hwrf_patches = []
-        all_best_track_input_data = []
-        all_best_track_label_data = []
-        for idx in index_list_temp:
+        all_hwrf_patches = np.zeros((index_list_temp.size, self.x_size, self.x_size, self.num_hwrf_variables), dtype=np.float32)
+        all_best_track_input_data = np.zeros((index_list_temp.size, self.num_best_track_input_variables), dtype=np.float32)
+        all_best_track_label_data = np.zeros((index_list_temp.size, self.num_best_track_label_variables), dtype=np.float32)
+        for i, idx in enumerate(index_list_temp):
             hwrf_file = self.hwrf_files[idx]
-            print(idx, hwrf_file)
-            hwrf_patch = np.zeros((1, self.x_size, self.x_size, self.num_hwrf_variables), dtype=np.float32)
             hwrf_data = HWRFStep(hwrf_file)
             for v, variable in enumerate(self.hwrf_variables):
-                hwrf_patch[0, :, :, v] = hwrf_data.get_variable(variable, level=self.hwrf_variable_levels[v],
+                all_hwrf_patches[i, :, :, v] = hwrf_data.get_variable(variable, level=self.hwrf_variable_levels[v],
                                                             subset=self.x_subset)
+                all_hwrf_patches[i, :, :, v][np.isnan(all_hwrf_patches[i, :, :, v])] = np.nanmin(all_hwrf_patches[i, :, :, v])
             hwrf_data.close()
-            best_track_input_data = self.best_track.get_storm_variables(self.best_track_input_variables,
+            all_best_track_input_data[i] = self.best_track.get_storm_variables(self.best_track_input_variables,
                                             hwrf_data.run_date, hwrf_data.storm_name, hwrf_data.storm_number,
                                             hwrf_data.basin, hwrf_data.forecast_hour)
-            best_track_label_data = self.best_track.get_storm_variables(self.best_track_label_variables,
+            all_best_track_label_data[i] = self.best_track.get_storm_variables(self.best_track_label_variables,
                                                                     hwrf_data.run_date, hwrf_data.storm_name,
                                                                     hwrf_data.storm_number,
                                                                     hwrf_data.basin, hwrf_data.forecast_hour)
-            all_hwrf_patches.append(hwrf_patch)
-            all_best_track_input_data.append(best_track_input_data)
-            all_best_track_label_data.append(best_track_label_data)
-        return [np.concatenate(all_hwrf_patches,axis=0), np.concatenate(all_best_track_input_data, axis=0)], np.concatenate(all_best_track_label_data, axis=0)
+        return [all_hwrf_patches, all_best_track_input_data], all_best_track_label_data
 
