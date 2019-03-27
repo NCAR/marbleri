@@ -54,7 +54,7 @@ class StandardConvNet(object):
         Create a keras model with the hyperparameters specified in the constructor.
 
         Args:
-            input_shape (tuple of shape [y, x, variables]): The shape of the input data
+            conv_input_shape (tuple of shape [y, x, variables]): The shape of the input data
             output_size: Number of neurons in output layer.
         """
         input_layer = Input(shape=conv_input_shape, name="scn_input")
@@ -169,7 +169,7 @@ class ResNet(StandardConvNet):
         return out
 
     def build_network(self, conv_input_shape, scalar_input_shape, output_size):
-        input_layer = Input(shape=input_shape, name="scn_input")
+        input_layer = Input(shape=conv_input_shape, name="scn_input")
         scalar_input_layer = Input(shape=scalar_input_shape, name="scn_scalar_input")
         scn_scalar_model = BatchNormalization()(scalar_input_layer)
         num_conv_layers = int(np.log2(conv_input_shape[1]) - np.log2(self.min_data_width))
