@@ -1,11 +1,28 @@
 import xarray as xr
 from keras.utils import Sequence
 from os.path import exists, join
+import pandas as pd
 import numpy as np
 import re
 
 
 class HWRFStep(object):
+    """
+    HWRFStep loads a single HWRF netCDF file and enables the extraction of variables in the file.
+
+    Attributes:
+        filename: Full path and name of the HWRF file
+        decode_cf: Whether to decode file coordinate variables based on the CF conventions in xarray.open_dataset.
+        decode_times: Whether or not to convert the time variables from their raw formats to datetime.
+        decode_coords: Whether or not to calculate the latitude and longitude grids with xarray.
+        storm_name: Name of the storm extracted from the filename.
+        storm_number: Number associated with the storm.
+        basin: Which ocean basin the storm occurs in. "e" is for East Pacific and "l" is for Atlantic.
+        run_date: The date that HWRF was initialized
+        forecast_hour: How many hours since the run date. This is when the model output is valid.
+        ds: `xarray.Dataset` object containing the model variables.
+        levels: Pressure levels for the 3D variables stored in the file. The pressures are in Pa.
+    """
     def __init__(self, filename, decode_cf=False, decode_times=False, decode_coords=False):
         if not exists(filename):
             raise FileNotFoundError(filename + " not found.")
@@ -25,6 +42,17 @@ class HWRFStep(object):
         self.levels = self.ds["lv_ISBL0"].values
 
     def get_variable(self, variable_name, level=None, subset=None):
+        """
+        Extract a particular variable from the file
+
+        Args:
+            variable_name:
+            level:
+            subset:
+
+        Returns:
+
+        """
         if variable_name not in list(self.ds.variables):
             raise KeyError(variable_name + " not available in " + self.filename)
         if subset is None:
@@ -72,7 +100,6 @@ class BestTrackNetCDF(object):
             for col in self.bt_runs[basin].columns:
                 self.bt_runs[basin][col] = self.bt_runs[basin][col].str.strip().str.decode("utf-8")
 
-
     def get_storm_variables(self, variables, run_date, storm_name, storm_number, basin, forecast_hour):
         b_runs = self.bt_runs[basin]
         run_index = np.where((b_runs["DATE"] == run_date) &
@@ -87,11 +114,23 @@ class BestTrackNetCDF(object):
         bt_values[np.isnan(bt_values)] = 0
         return bt_values
 
+    def to_dataframe(self, variables, dropna=True):
+        basin_dfs = []
+        for basin in self.bt_ds.keys():
+            basin_dfs.append(self.bt_ds[basin][variables].to_dataframe())
+            if dropna:
+                basin_dfs[-1].dropna(inplace=True)
+        return pd.concat(basin_dfs)
+
     def close(self):
         for basin in self.bt_ds.keys():
             self.bt_ds[basin].close()
             del self.bt_ds[basin]
 
+
+def process_hwrf_run(run_date, storm_name, storm_number, forecast_hours, variable_levels, subset_indices,
+                     hwrf_path, out_path):
+    return
 
 class HWRFSequence(Sequence):
     """
@@ -116,6 +155,7 @@ class HWRFSequence(Sequence):
         self.shuffle = True
         self.indexes = np.arange(len(self.hwrf_files))
         self.on_epoch_end()
+        self.shuffle = shuffle
 
     def __len__(self):
         return int(np.floor(len(self.hwrf_files) / self.batch_size))
