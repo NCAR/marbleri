@@ -1,9 +1,35 @@
 from keras.layers import Dense, Conv2D, Activation, Input, Flatten, AveragePooling2D, MaxPool2D, LeakyReLU, Dropout, Add
-from keras.layers import BatchNormalization, Concatenate
+from keras.layers import BatchNormalization, Concatenate, Layer
 from keras.models import Model
 from keras.optimizers import Adam, SGD
 import numpy as np
 import keras.backend as K
+import tensorflow_probability as tfp
+tfd = tfp.distributions
+
+
+class NormOut(Layer):
+    def __init__(self, **kwargs):
+        super(NormOut, self).__init__(**kwargs)
+        self.mean_dense = Dense(1)
+        self.sd_dense = Dense(1, activation=K.tf.exp)
+
+    def call(self, inputs, **kwargs):
+        mean_x = self.mean_dense(inputs)
+        sd_x = self.sd_dense(inputs)
+        return Concatenate()([mean_x, sd_x])
+
+    def compute_output_shape(self, input_shape):
+        return input_shape[0], 2
+
+
+def crps(y_true, y_pred, cdf_points=np.arange(0.0, 200.0, 5.0)):
+    cdf_points_tensor = K.tf.constant(0.5 * (cdf_points[:-1] + cdf_points[1:]), dtype="float32")
+    cdf_point_diffs = K.tf.constant(cdf_points[1:] - cdf_points[:-1], dtype="float32")
+    y_pred_cdf = tfd.Normal(loc=y_pred[:, 0:1], scale=y_pred[:, 1:2]).cdf(cdf_points_tensor)
+    y_true_cdf = K.tf.cast(y_true <= cdf_points_tensor, "float32")
+    cdf_diffs = K.tf.reduce_mean((y_pred_cdf - y_true_cdf) ** 2 * cdf_point_diffs, axis=1)
+    return K.tf.reduce_mean(cdf_diffs)
 
 
 class StandardConvNet(object):

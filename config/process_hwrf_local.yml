@@ -1,0 +1,3 @@
+best_track_path: "/Users/dgagne/data/hfip/besttrack_predictors/"
+best_track_variables: ["TIME", "LON", "LAT","VMAX", "RMW", "MIN_SLP", "SHR_MAG", "SHR_HDG", "STM_SPD",
+                       "STM_HDG", "SST", "TPW", "LAND", "vmax_bt_newer"]

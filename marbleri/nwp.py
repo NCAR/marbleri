@@ -86,7 +86,7 @@ class BestTrackNetCDF(object):
     def __init__(self,
                  atl_filename="diag_2015_2017_adecks_atl_bug_corrected.nc",
                  epo_filename="diag_2015_2017_adecks_epo_bug_corrected.nc",
-                 file_path="/glade/p/ral/nsap/rozoff/hfip/besttrack_predictors"):
+                 file_path="/glade/p/ral/nsap/rozoff/hfip/besttrack_predictors/"):
         self.atl_filename = atl_filename
         self.epo_filename = epo_filename
         self.file_path = file_path
@@ -95,6 +95,8 @@ class BestTrackNetCDF(object):
         self.bt_ds["e"] = xr.open_dataset(join(self.file_path, self.epo_filename))
         self.bt_runs = dict()
         self.run_columns = ["DATE", "STNAM", "STNUM", "BASIN"]
+        for basin in ["l", "e"]:
+            self.bt_ds[basin]["vmax_bt_newer"] = xr.DataArray(self.bt_ds[basin]["vmax_bt_new"], dims=("time", "run"))
         for basin in self.bt_ds.keys():
             self.bt_runs[basin] = self.bt_ds[basin][self.run_columns].to_dataframe()
             for col in self.bt_runs[basin].columns:
@@ -117,10 +119,13 @@ class BestTrackNetCDF(object):
     def to_dataframe(self, variables, dropna=True):
         basin_dfs = []
         for basin in self.bt_ds.keys():
-            basin_dfs.append(self.bt_ds[basin][variables].to_dataframe())
+            print(basin)
+            basin_dfs.append(pd.merge(self.bt_runs[basin], self.bt_ds[basin][variables].to_dataframe(), how="right",
+                                      left_index=True, right_index=True))
+            print(basin_dfs[-1])
             if dropna:
-                basin_dfs[-1].dropna(inplace=True)
-        return pd.concat(basin_dfs)
+                basin_dfs[-1] = basin_dfs[-1].dropna()
+        return pd.concat(basin_dfs, ignore_index=True)
 
     def close(self):
         for basin in self.bt_ds.keys():
@@ -128,8 +133,11 @@ class BestTrackNetCDF(object):
             del self.bt_ds[basin]
 
 
-def process_hwrf_run(run_date, storm_name, storm_number, forecast_hours, variable_levels, subset_indices,
+def process_hwrf_run(run_date, storm_name, storm_number, basin, forecast_hour, variable_levels, subset_indices,
                      hwrf_path, out_path):
+    hwrf_filename = join(hwrf_path, f"{storm_name}{storm_number:02d}{basin}.{run_date}.f{forecast_hour:03d}.nc")
+    hwrf_data = HWRFStep(hwrf_filename)
+
     return
 
 class HWRFSequence(Sequence):
