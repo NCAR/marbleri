@@ -133,12 +133,7 @@ class BestTrackNetCDF(object):
             del self.bt_ds[basin]
 
 
-def process_hwrf_run(run_date, storm_name, storm_number, basin, forecast_hour, variable_levels, subset_indices,
-                     hwrf_path, out_path):
-    hwrf_filename = join(hwrf_path, f"{storm_name}{storm_number:02d}{basin}.{run_date}.f{forecast_hour:03d}.nc")
-    hwrf_data = HWRFStep(hwrf_filename)
 
-    return
 
 class HWRFSequence(Sequence):
     """
