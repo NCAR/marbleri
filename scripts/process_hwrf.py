@@ -37,15 +37,21 @@ def main():
     for vl in hwrf_variable_levels:
         print(vl)
     hwrf_files = get_hwrf_filenames(bt_df, config["hwrf_path"])
-    for hwrf_file in  hwrf_files:
-        print(hwrf_file)
     if config["process_hwrf"]:
-        cluster = LocalCluster(n_workers=config["n_workers"])
+        print(config["n_workers"])
+        print(config["dask_worker"])
+        cluster = LocalCluster(n_workers=0, threads_per_worker=1)
+        for i in range(config["n_workers"]):
+            cluster.start_worker(**config["dask_worker"])
         client = Client(cluster)
+        print(client)
+        print(cluster)
         if config["normalize"] == "local":
-            norm_values = calculate_hwrf_local_norms(hwrf_files, hwrf_variable_levels, config["out_path"], client)
+            print("local normalization")
+            norm_values = calculate_hwrf_local_norms(hwrf_files, hwrf_variable_levels, config["out_path"], client, config["n_workers"])
             global_norm = False
         else:
+            print("global normalization")
             norm_values = calculate_hwrf_global_norms(hwrf_files, hwrf_variable_levels, config["out_path"], client)
             global_norm = True
         hwrf_out = join(config["out_path"], "hwrf")
@@ -53,7 +59,8 @@ def main():
             os.makedirs(hwrf_out)
         # in parallel extract variables from each model run, subset center from rest of grid and save to other
         # netCDF files
-        process_all_hwrf_runs(bt_df, hwrf_variable_levels, norm_values, global_norm, config["hwrf_path"],
+        print("process HWRF runs")
+        process_all_hwrf_runs(hwrf_files, hwrf_variable_levels, norm_values, global_norm, 
                               hwrf_out, config["n_workers"], client)
         client.close()
         cluster.close()

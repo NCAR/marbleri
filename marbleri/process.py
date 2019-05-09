@@ -19,39 +19,30 @@ def get_hwrf_filenames(best_track_df, hwrf_path):
     return hwrf_filenames
 
 
-def process_all_hwrf_runs(best_track_df, variable_levels, norm_values, global_norm, hwrf_path, out_path,
+def process_all_hwrf_runs(hwrf_files, variable_levels, norm_values, global_norm, out_path,
                           n_workers, dask_client):
     futures = []
-    for i in range(np.minimum(n_workers, best_track_df.shape[0])):
-        storm_name = best_track_df.loc[i, "STNAM"]
-        storm_number = int(best_track_df.loc[i, "STNUM"])
-        basin = best_track_df.loc[i, "BASIN"]
-        run_date = best_track_df.loc[i, "DATE"]
-        forecast_hour = int(best_track_df.loc[i, "TIME"])
-        futures.append(dask_client.submit(process_hwrf_run, run_date, storm_name, storm_number, basin, forecast_hour,
+    split_points = list(range(0, len(hwrf_files), len(hwrf_files) // n_workers)) + [len(hwrf_files)]
+    for s, split_point in enumerate(split_points[:-1]):
+        futures.append(dask_client.submit(process_hwrf_run_set, hwrf_files[split_point:split_points[s+1]],
                                                            variable_levels, hwrf_path, out_path,
                                                            norm_values, global_norm))
-    i = np.minimum(n_workers, best_track_df.shape[0])
-    ac = as_completed(futures)
-    for future in ac:
-        future.result()
-        if i < best_track_df.shape[0]:
-            storm_name = best_track_df.loc[i, "STNAM"]
-            storm_number = int(best_track_df.loc[i, "STNUM"])
-            basin = best_track_df.loc[i, "BASIN"]
-            run_date = best_track_df.loc[i, "DATE"]
-            forecast_hour = int(best_track_df.loc[i, "TIME"])
-            ac.add(dask_client.submit(process_hwrf_run, run_date, storm_name, storm_number, basin, forecast_hour,
-                                                           variable_levels, hwrf_path, out_path,
-                                                           norm_values, global_norm))
-            i += 1
+    dask_client.gather(futures)
+    del futures[:]
     return
 
 
-def process_hwrf_run(run_date, storm_name, storm_number, basin, forecast_hour, variable_levels,
-                     hwrf_path, out_path, norm_values, global_norm=False, subset_indices=None,):
-    hwrf_filename = join(hwrf_path, f"{storm_name}{storm_number:02d}{basin}.{run_date}.f{forecast_hour:03d}.nc")
-    print(hwrf_filename)
+def process_hwrf_run_set(hwrf_files, variable_levels, out_path, norm_values, global_norm=False, subset_indices=None):
+    exit_code_sum = 0 
+    num_hwrf_files = len(hwrf_files)
+    for h, hwrf_file in enumerate(hwrf_files):
+        if h % 5 == 0:
+            print("Processing ", h, h * 100 / num_hwrf_files, hwrf_file)
+        exit_code_sum += process_hwrf_run(hwrf_file, variable_levels, out_path, norm_values, global_norm=global_norm, subset_indices=subset_indices)
+    return exit_code_sum
+
+def process_hwrf_run(hwrf_filename, variable_levels,
+                     out_path, norm_values, global_norm=False, subset_indices=None,):
     hwrf_data = HWRFStep(hwrf_filename)
     if subset_indices is None:
         subset_start = 0
@@ -153,20 +144,26 @@ def hwrf_step_global_variances(hwrf_filename, variable_levels, variable_means):
     return sum_counts
 
 
-def calculate_hwrf_local_norms(hwrf_files, variable_levels, out_path, dask_client):
+def calculate_hwrf_local_norms(hwrf_files, variable_levels, out_path, dask_client, n_workers):
     hwrf_futures = []
     local_stats = np.zeros((len(variable_levels), 601, 601, 6))
-    for hwrf_filename in hwrf_files:
-        hwrf_futures.append(dask_client.submit(hwrf_step_local_sums, hwrf_filename, variable_levels))
-    for hwrf_future in as_completed(hwrf_futures):
-        local_stats[:, :, :, 0:2] += hwrf_future.result()
+    split_points = list(range(0, len(hwrf_files), len(hwrf_files) // n_workers)) + [len(hwrf_files)]
+    for s, split_point in enumerate(split_points[:-1]):
+        print(split_point, split_points[s +1])
+        hwrf_futures.append(dask_client.submit(hwrf_set_local_sums, hwrf_files[split_point:split_points[s+1]], variable_levels))
+    local_stats[:, :, :, 0:2] = np.sum(dask_client.gather(hwrf_futures), axis=0)
     del hwrf_futures[:]
     local_stats[:, :, :, 4] = local_stats[:, :, :, 0] / local_stats[:, :, :, 1]
-    for hwrf_filename in hwrf_files:
-        hwrf_futures.append(dask_client.submit(hwrf_step_local_variances, hwrf_filename,
-                                               variable_levels, local_stats[:, 4]))
-    for hwrf_future in as_completed(hwrf_futures):
-        local_stats[:, :, :, 2:4] += hwrf_future.result()
+    local_mean = local_stats[:, :, :, 4]
+    local_stat_data = xr.DataArray(local_stats, dims=("variable", "lat", "lon", "statistic"),
+                 coords={"variable": var_level_str, "lat": np.arange(601),
+                         "lon": np.arange(601), "statistic": df_columns}, name="local_norm_stats")
+    local_stat_data.to_netcdf(join(out_path, "hwrf_local_norm_stats.nc"))
+    for s, split_point in enumerate(split_points[:-1]):
+        print(split_point, split_points[s +1])
+        hwrf_futures.append(dask_client.submit(hwrf_set_local_variances, hwrf_files[split_point:split_points[s+1]],
+                                               variable_levels, local_mean))
+    local_stats[:, :, :, 2:4] = np.sum(dask_client.gather(hwrf_futures), axis=0)
     local_stats[:, :, :, 5] = np.sqrt(local_stats[:, :, :, 2] / (local_stats[:, :, :, 3] - 1.0))
     var_level_str = get_var_level_strings(variable_levels)
     df_columns = ["sum", "sum_count", "sum_squared_diff", "sum_squared_diff_count", "mean", "standard_dev"]
@@ -177,6 +174,15 @@ def calculate_hwrf_local_norms(hwrf_files, variable_levels, out_path, dask_clien
     return local_stat_data
 
 
+def hwrf_set_local_sums(hwrf_files, variable_levels): 
+    sum_counts = np.zeros((len(variable_levels), 601, 601, 2))
+    num_hwrf_files = len(hwrf_files)
+    for h, hwrf_file in enumerate(hwrf_files):
+        if h % 5 == 0:
+            print("Mean ", h, h * 100 / num_hwrf_files, hwrf_file)
+        sum_counts += hwrf_step_local_sums(hwrf_file, variable_levels)
+    return sum_counts
+
 def hwrf_step_local_sums(hwrf_filename, variable_levels):
     hwrf_data = HWRFStep(hwrf_filename)
     sum_counts = np.zeros((len(variable_levels), 601, 601, 2))
@@ -186,6 +192,15 @@ def hwrf_step_local_sums(hwrf_filename, variable_levels):
         sum_counts[v, :, :, 1] = np.where(~np.isnan(var_data), 1, 0)
     hwrf_data.close()
     return sum_counts
+
+def hwrf_set_local_variances(hwrf_files, variable_levels, variable_means): 
+    sum_counts = np.zeros((len(variable_levels), 601, 601, 2))
+    num_hwrf_files = len(hwrf_files)
+    for h, hwrf_file in enumerate(hwrf_files):
+        if h % 5 == 0:
+            print("Var ", h, h * 100/ num_hwrf_files, hwrf_file)
+        sum_counts += hwrf_step_local_variances(hwrf_file, variable_levels, variable_means)
+    return sum_counts 
 
 
 def hwrf_step_local_variances(hwrf_filename, variable_levels, variable_means):

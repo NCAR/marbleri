@@ -9,4 +9,7 @@ hwrf_path: "/glade/p/ral/nsap/rozoff/hfip/reforecast/"
 out_path: "/glade/p/ral/allral/dgagne/hfip/processed_data/"
 process_hwrf: 1
 normalize: "local"
-n_workers: 64
+n_workers: 34
+dask_worker:
+    ncores: 1
+    local_dir: "/glade/scratch/dgagne/dask-worker-space/"
