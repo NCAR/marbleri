@@ -7,6 +7,6 @@ hwrf_variables: ["TMP_P0_L100_GLL0", "TMP_P0_L103_GLL0", "RH_P0_L100_GLL0", "RH_
 hwrf_levels: [20000, 50000, 70000, 85000]
 hwrf_path: "/glade/p/ral/nsap/rozoff/hfip/reforecast/"
 out_path: "/glade/p/ral/allral/dgagne/hfip/processed_data/"
-process_hwrf: 0
+process_hwrf: 1
 normalize: "local"
 n_workers: 64

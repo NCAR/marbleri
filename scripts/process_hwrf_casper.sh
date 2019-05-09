@@ -7,7 +7,7 @@
 #SBATCH --partition=dav
 #SBATCH --mem=200G
 module purge
-module load gnu/7.3.0 openmpi-x/3.1.0 python/3.6.4
+module load gnu/7.3.0 openmpi-x/3.1.0 python/3.6.4 cuda/9.2
 source /glade/work/dgagne/ncar_pylib_dl/bin/activate
 cd ~/marbleri/
 python setup.py install

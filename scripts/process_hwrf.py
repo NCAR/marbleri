@@ -23,9 +23,6 @@ def main():
     bt_nc = BestTrackNetCDF(file_path=best_track_path)
     # convert best track data to data frame and filter out NaNs in HWRF and best track winds
     bt_df = bt_nc.to_dataframe(best_track_variables, dropna=True)
-    print(bt_df)
-    print(bt_df.columns)
-    print(bt_df.loc[0])
     bt_df.to_csv(join(config["out_path"], "best_track_all.csv"), index_label="Index")
     # calculate derived variables in data frame
     hwrf_variables = config["hwrf_variables"]
