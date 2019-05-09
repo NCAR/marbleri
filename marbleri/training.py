@@ -1,5 +1,7 @@
 import numpy as np
 from keras.utils import Sequence
+from .nwp import HWRFStep
+
 
 class HWRFSequence(Sequence):
     """
@@ -51,3 +53,13 @@ class HWRFSequence(Sequence):
             for v, variable in enumerate(self.hwrf_variables):
                 all_hwrf_patches[i, :, :, v] = hwrf_data.get_variable(variable, level=self.hwrf_variable_levels[v],
                                                             subset=self.x_subset)
+                all_hwrf_patches[i, :, :, v][np.isnan(all_hwrf_patches[i, :, :, v])] = np.nanmin(all_hwrf_patches[i, :, :, v])
+            hwrf_data.close()
+            all_best_track_input_data[i] = self.best_track.get_storm_variables(self.best_track_input_variables,
+                                            hwrf_data.run_date, hwrf_data.storm_name, hwrf_data.storm_number,
+                                            hwrf_data.basin, hwrf_data.forecast_hour)
+            all_best_track_label_data[i] = self.best_track.get_storm_variables(self.best_track_label_variables,
+                                                                    hwrf_data.run_date, hwrf_data.storm_name,
+                                                                    hwrf_data.storm_number,
+                                                                    hwrf_data.basin, hwrf_data.forecast_hour)
+        return [all_hwrf_patches, all_best_track_input_data], all_best_track_label_data

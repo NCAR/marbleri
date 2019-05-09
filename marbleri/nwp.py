@@ -131,7 +131,3 @@ class BestTrackNetCDF(object):
             self.bt_ds[basin].close()
             del self.bt_ds[basin]
 
-
-
-
-

@@ -10,10 +10,10 @@ def get_hwrf_filenames(best_track_df, hwrf_path):
     hwrf_filenames = []
     for i in range(best_track_df.shape[0]):
         storm_name = best_track_df.loc[i, "STNAM"]
-        storm_number = best_track_df.loc[i, "STNUM"]
+        storm_number = int(best_track_df.loc[i, "STNUM"])
         basin = best_track_df.loc[i, "BASIN"]
         run_date = best_track_df.loc[i, "DATE"]
-        forecast_hour = best_track_df.loc[i, "TIME"]
+        forecast_hour = int(best_track_df.loc[i, "TIME"])
         hwrf_filename = join(hwrf_path, f"{storm_name}{storm_number:02d}{basin}.{run_date}.f{forecast_hour:03d}.nc")
         hwrf_filenames.append(hwrf_filename)
     return hwrf_filenames
@@ -24,10 +24,10 @@ def process_all_hwrf_runs(best_track_df, variable_levels, norm_values, global_no
     futures = []
     for i in range(np.minimum(n_workers, best_track_df.shape[0])):
         storm_name = best_track_df.loc[i, "STNAM"]
-        storm_number = best_track_df.loc[i, "STNUM"]
+        storm_number = int(best_track_df.loc[i, "STNUM"])
         basin = best_track_df.loc[i, "BASIN"]
         run_date = best_track_df.loc[i, "DATE"]
-        forecast_hour = best_track_df.loc[i, "TIME"]
+        forecast_hour = int(best_track_df.loc[i, "TIME"])
         futures.append(dask_client.submit(process_hwrf_run, run_date, storm_name, storm_number, basin, forecast_hour,
                                                            variable_levels, hwrf_path, out_path,
                                                            norm_values, global_norm))
@@ -37,10 +37,10 @@ def process_all_hwrf_runs(best_track_df, variable_levels, norm_values, global_no
         future.result()
         if i < best_track_df.shape[0]:
             storm_name = best_track_df.loc[i, "STNAM"]
-            storm_number = best_track_df.loc[i, "STNUM"]
+            storm_number = int(best_track_df.loc[i, "STNUM"])
             basin = best_track_df.loc[i, "BASIN"]
             run_date = best_track_df.loc[i, "DATE"]
-            forecast_hour = best_track_df.loc[i, "TIME"]
+            forecast_hour = int(best_track_df.loc[i, "TIME"])
             ac.add(dask_client.submit(process_hwrf_run, run_date, storm_name, storm_number, basin, forecast_hour,
                                                            variable_levels, hwrf_path, out_path,
                                                            norm_values, global_norm))

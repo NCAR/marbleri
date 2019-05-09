@@ -36,10 +36,12 @@ def main():
             hwrf_variable_levels.append((var, None))
     for vl in hwrf_variable_levels:
         print(vl)
+    hwrf_files = get_hwrf_filenames(bt_df, config["hwrf_path"])
+    for hwrf_file in  hwrf_files:
+        print(hwrf_file)
     if config["process_hwrf"]:
         cluster = LocalCluster(n_workers=config["n_workers"])
         client = Client(cluster)
-        hwrf_files = get_hwrf_filenames(bt_df, config["hwrf_path"])
         if config["normalize"] == "local":
             norm_values = calculate_hwrf_local_norms(hwrf_files, hwrf_variable_levels, config["out_path"], client)
             global_norm = False
