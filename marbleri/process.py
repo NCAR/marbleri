@@ -67,7 +67,9 @@ def process_hwrf_run(hwrf_filename, variable_levels,
                                                                                 "lat": np.arange(subset_width),
                                                                                 "lon": np.arange(subset_width)},
                       name="hwrf_norm")
-    ds.to_netcdf(join(out_path, hwrf_filename.split("/")[-1]))
+    ds.to_netcdf(join(out_path, hwrf_filename.split("/")[-1]),
+                 encoding={"hwrf_norm": {"zlib": True, "complevel": 3}}
+                 )
     return 0
 
 
@@ -163,7 +165,8 @@ def calculate_hwrf_local_norms(hwrf_files, variable_levels, out_path, dask_clien
     local_stat_data = xr.DataArray(local_stats, dims=("variable", "lat", "lon", "statistic"),
                  coords={"variable": var_level_str, "lat": np.arange(601),
                          "lon": np.arange(601), "statistic": df_columns}, name="local_norm_stats")
-    local_stat_data.to_netcdf(join(out_path, "hwrf_local_norm_stats.nc"))
+    local_stat_data.to_netcdf(join(out_path, "hwrf_local_norm_stats.nc"),
+                              encoding={"local_norm_stats": {"zlib": True, "complevel": 3}})
     for s, split_point in enumerate(split_points[:-1]):
         print(split_point, split_points[s +1])
         hwrf_futures.append(dask_client.submit(hwrf_set_local_variances, hwrf_files[split_point:split_points[s+1]],
@@ -173,7 +176,8 @@ def calculate_hwrf_local_norms(hwrf_files, variable_levels, out_path, dask_clien
     local_stat_data = xr.DataArray(local_stats, dims=("variable", "lat", "lon", "statistic"),
                  coords={"variable": var_level_str, "lat": np.arange(601),
                          "lon": np.arange(601), "statistic": df_columns}, name="local_norm_stats")
-    local_stat_data.to_netcdf(join(out_path, "hwrf_local_norm_stats.nc"))
+    local_stat_data.to_netcdf(join(out_path, "hwrf_local_norm_stats.nc"),
+                              encoding={"local_norm_stats": {"zlib": True, "complevel": 3}})
     return local_stat_data
 
 
@@ -192,10 +196,12 @@ def hwrf_step_local_sums(hwrf_filename, variable_levels):
     sum_counts = np.zeros((len(variable_levels), 601, 601, 2))
     for v, var_level in enumerate(variable_levels):
         var_data = hwrf_data.get_variable(var_level[0], var_level[1]).values
+        var_data[var_data > 1e7] = np.nan
         sum_counts[v, :, :, 0] = np.where(~np.isnan(var_data), var_data, 0)
         sum_counts[v, :, :, 1] = np.where(~np.isnan(var_data), 1, 0)
     hwrf_data.close()
     return sum_counts
+
 
 def hwrf_set_local_variances(hwrf_files, variable_levels, variable_means): 
     sum_counts = np.zeros((len(variable_levels), 601, 601, 2))
@@ -212,6 +218,7 @@ def hwrf_step_local_variances(hwrf_filename, variable_levels, variable_means):
     sum_counts = np.zeros((len(variable_levels), 601, 601, 2))
     for v, var_level in enumerate(variable_levels):
         var_data = hwrf_data.get_variable(var_level[0], var_level[1]).values
+        var_data[var_data > 1e7] = np.nan
         sum_counts[v, :, :, 0] = np.where(~np.isnan(var_data), (var_data - variable_means[v]) ** 2, 0)
         sum_counts[v, :, :, 1] = np.where(~np.isnan(var_data), 1, 0)
     hwrf_data.close()
