@@ -2,6 +2,8 @@ from keras.layers import Dense, Conv2D, Activation, Input, Flatten, AveragePooli
 from keras.layers import BatchNormalization, Concatenate, Layer
 from keras.models import Model
 from keras.optimizers import Adam, SGD
+from keras.losses import mean_squared_error
+from keras.utils import multi_gpu_model
 import numpy as np
 import keras.backend as K
 import tensorflow_probability as tfp
@@ -64,6 +66,11 @@ def crps_mixture(y_true, y_pred, cdf_points=np.arange(0, 200.0, 5.0)):
     return K.tf.reduce_mean(cdf_diffs)
 
 
+losses = {"mse": mean_squared_error,
+          "crps_norm": crps_norm,
+          "crps_mixture": crps_mixture}
+
+
 class StandardConvNet(object):
     """
     Standard Convolutional Neural Network contains a series of convolution and pooling layers followed by one
@@ -73,28 +80,46 @@ class StandardConvNet(object):
     Attributes:
         min_filters (int): The number of convolution filters in the first layer.
         filter_growth_rate (float): Multiplier on the number of convolution filters between layers.
+        filter_width (int): Width in number of pixels in each convolution filter
         min_data_width (int): The minimum dimension of the input data after the final pooling layer. Constrains the number of
             convolutional layers.
+        pooling_width (int): Width of pooling layer
+        scalar_hidden_layers (int): Number of dense hidden layers for transforming the scalar values.
+        scalar_hidden_neurons (int): Number of neurons in each dense hidden layer.
         hidden_activation (str): The nonlinear activation function applied after each convolutional layer. If "leaky", a leaky ReLU with
             alpha=0.1 is used.
-        output_activation (str): The nonlinear activation function applied on the output layer.
+        output_type (str): "linear" (deterministic), "gaussian" (mean and standard deviation), or "mixture_2"
+            (gaussian mixture model with number of Gaussians as the part the underscore.
         pooling (str): If mean, then :class:`keras.layers.AveragePooling2D` is used for pooling. If max, then :class:`keras.layers.MaxPool2D` is used.
         use_dropout (bool): If True, then a :class:`keras.layers.Dropout` layer is inserted between the final convolution block
             and the output :class:`keras.laysers.Dense` layer.
-
+        dropout_alpha (float): probability of a neuron being set to zero.
+        data_format (str): "channels_first" or "channels_last"
+        optimizer (str): Name of the optimizer being used. "sgd" and "adam" are supported.
+        loss (str): "mse", "crps_norm", or "crps_mixture"
+        leaky_alpha (float): Scaling factor for leaky ReLU activation.
+        metrics (None or list): Metrics to track during training
+        learning_rate (float): optimization learning rate
+        batch_size (int): Number of samples per batch
+        epochs (int): Number of passes through training data
+        verbose (int): Level of verbosity
     """
 
-    def __init__(self, min_filters=16, filter_growth_rate=2, filter_width=5, min_data_width=4,
-                 hidden_activation="relu", output_activation="linear",
+    def __init__(self, min_filters=16, filter_growth_rate=2, filter_width=5, min_data_width=4, pooling_width=2,
+                 scalar_hidden_layers=1, scaler_hidden_neurons=30,
+                 hidden_activation="relu", output_type="linear",
                  pooling="mean", use_dropout=False, dropout_alpha=0.0,
                  data_format="channels_first", optimizer="adam", loss="mse", leaky_alpha=0.1, metrics=None,
                  learning_rate=0.001, batch_size=1024, epochs=10, verbose=0):
         self.min_filters = min_filters
         self.filter_width = filter_width
         self.filter_growth_rate = filter_growth_rate
+        self.pooling_width = pooling_width
         self.min_data_width = min_data_width
+        self.scalar_hidden_layers = scalar_hidden_layers
+        self.scalar_hidden_neurons = scaler_hidden_neurons
         self.hidden_activation = hidden_activation
-        self.output_activation = output_activation
+        self.output_type = output_type
         self.use_dropout = use_dropout
         self.pooling = pooling
         self.dropout_alpha = dropout_alpha
@@ -110,18 +135,21 @@ class StandardConvNet(object):
         self.parallel_model = None
         self.verbose = verbose
 
-    def build_network(self, input_shape, output_size):
+    def build_network(self, scalar_input_shape, conv_input_shape, output_size):
         """
         Create a keras model with the hyperparameters specified in the constructor.
 
         Args:
-            input_shape (tuple of shape [variable, y, x]): The shape of the input data
+            scalar_input_shape: Number of columns in input table
+            conv_input_shape (tuple of shape [variable, y, x]): The shape of the input data
             output_size: Number of neurons in output layer.
         """
-        input_layer = Input(shape=input_shape, name="scn_input")
-        num_conv_layers = int(np.log2(input_shape[1]) - np.log2(self.min_data_width))
+        scalar_input_layer = Input(shape=(scalar_input_shape,), name="scalar_input")
+        conv_input_layer = Input(shape=conv_input_shape, name="conv_input")
+        num_conv_layers = int(np.round((np.log(conv_input_shape[1]) - np.log(self.min_data_width))
+                                       / np.log(self.pooling_width)))
         num_filters = self.min_filters
-        scn_model = input_layer
+        scn_model = conv_input_layer
         for c in range(num_conv_layers):
             scn_model = Conv2D(num_filters, (self.filter_width, self.filter_width),
                                data_format=self.data_format, padding="same", name="conv_{0:02d}".format(c))(scn_model)
@@ -131,15 +159,31 @@ class StandardConvNet(object):
                 scn_model = Activation(self.hidden_activation, name="hidden_activation_{0:02d}".format(c))(scn_model)
             num_filters = int(num_filters * self.filter_growth_rate)
             if self.pooling.lower() == "max":
-                scn_model = MaxPool2D(data_format=self.data_format, name="pooling_{0:02d}".format(c))(scn_model)
+                scn_model = MaxPool2D(pool_size=(self.pooling_width, self.pooling_width),
+                                      data_format=self.data_format, name="pooling_{0:02d}".format(c))(scn_model)
             else:
-                scn_model = AveragePooling2D(data_format=self.data_format, name="pooling_{0:02d}".format(c))(scn_model)
+                scn_model = AveragePooling2D(pool_size=(self.pooling_width, self.pooling_width),
+                                             data_format=self.data_format, name="pooling_{0:02d}".format(c))(scn_model)
         scn_model = Flatten(name="flatten")(scn_model)
+        scalar_model = scalar_input_layer
+        for h in range(self.scalar_hidden_layers):
+            scalar_model = Dense(self.scalar_hidden_neurons, name=f"scalar_dense_{h:02d}")(scalar_model)
+            if self.hidden_activation == "leaky":
+                scalar_model = LeakyReLU(self.leaky_alpha, name=f"hidden_scalar_activation_{h:02d}")(scalar_model)
+            else:
+                scalar_model = Activation(self.hidden_activation, name=f"hidden_scalar_activation_{h:02d}")(scalar_model)
+        scn_model = Concatenate()([scalar_model, scn_model])
         if self.use_dropout:
             scn_model = Dropout(self.dropout_alpha, name="dense_dropout")(scn_model)
-        scn_model = Dense(output_size, name="dense_output")(scn_model)
-        scn_model = Activation(self.output_activation, name="activation_output")(scn_model)
-        self.model = Model(input_layer, scn_model)
+        if self.output_type == "linear":
+            scn_model = Dense(output_size, name="dense_output")(scn_model)
+            scn_model = Activation("linear", name="activation_output")(scn_model)
+        elif self.output_type == "gaussian":
+            scn_model = NormOut()(scn_model)
+        elif "mixture" in self.output_type:
+            num_mixtures = int(self.output_type.split("_")[1])
+            scn_model = GaussianMixtureOut(mixtures=num_mixtures)(scn_model)
+        self.model = Model([scalar_input_layer, conv_input_layer], scn_model)
 
     def compile_model(self):
         """
@@ -149,35 +193,36 @@ class StandardConvNet(object):
             opt = Adam(lr=self.learning_rate)
         else:
             opt = SGD(lr=self.learning_rate, momentum=0.99)
-        self.model.compile(opt, self.loss, metrics=self.metrics)
+        self.model.compile(opt, losses[self.loss], metrics=self.metrics)
 
-    def compile_parallel_model(self):
+    def compile_parallel_model(self, num_gpus):
+        self.parallel_model = multi_gpu_model(self.model, num_gpus)
         if self.optimizer == "adam":
             opt = Adam(lr=self.learning_rate)
         else:
             opt = SGD(lr=self.learning_rate, momentum=0.99)
-        self.parallel_model.compile(opt, self.loss, metrics=self.metrics)
+        self.parallel_model.compile(opt, losses[self.loss], metrics=self.metrics)
 
     @staticmethod
     def get_data_shapes(x, y):
         """
         Extract the input and output data shapes in order to construct the neural network.
         """
-        if len(x.shape) != 4:
+        if len(x[1].shape) != 4:
             raise ValueError("Input data does not have dimensions (examples, y, x, predictor)")
         if len(y.shape) == 1:
             output_size = 1
         else:
             output_size = y.shape[1]
-        return x.shape[1:], output_size
+        return x[0].shape[1], x[1].shape[1:], output_size
 
     def fit(self, x, y, val_x=None, val_y=None, build=True):
         """
         Train the neural network.
         """
         if build:
-            x_shape, y_size = self.get_data_shapes(x, y)
-            self.build_network(x_shape, y_size)
+            x_scalar_shape, x_conv_shape, y_size = self.get_data_shapes(x, y)
+            self.build_network(x_scalar_shape, x_conv_shape, y_size)
             self.compile_model()
         if val_x is None:
             val_data = None
@@ -192,18 +237,21 @@ class StandardConvNet(object):
 
 class ResNet(StandardConvNet):
     """
-    Extension of the :class:`goes16ci.models.StandardConvNet` to include Residual layers instead of single convolutional layers.
+    Extension of the :class:`marbleri.models.StandardConvNet` to include Residual layers instead of single convolutional layers.
     The residual layers split the data signal off, apply normalization and convolutions to it, then adds it back on to the original field.
     """
 
-    def __init__(self, min_filters=16, filter_growth_rate=2, filter_width=3, min_data_width=4,
-                 hidden_activation="relu", output_activation="sigmoid", metrics=None,
-                 pooling="mean", use_dropout=False, dropout_alpha=0.0, data_format="channels_first",
-                 learning_rate=0.001,
-                 optimizer="adam", loss="mse", leaky_alpha=0.1, batch_size=1024, epochs=10, verbose=0):
+    def __init__(self, min_filters=16, filter_growth_rate=2, filter_width=5, min_data_width=4, pooling_width=2,
+                 scalar_hidden_layers=1, scaler_hidden_neurons=30,
+                 hidden_activation="relu", output_type="linear",
+                 pooling="mean", use_dropout=False, dropout_alpha=0.0,
+                 data_format="channels_first", optimizer="adam", loss="mse", leaky_alpha=0.1, metrics=None,
+                 learning_rate=0.001, batch_size=1024, epochs=10, verbose=0):
         super().__init__(min_filters=min_filters, filter_growth_rate=filter_growth_rate, filter_width=filter_width,
-                         min_data_width=min_data_width, hidden_activation=hidden_activation, data_format=data_format,
-                         output_activation=output_activation, pooling=pooling, use_dropout=use_dropout,
+                         min_data_width=min_data_width, pooling_width=pooling_width,
+                         hidden_activation=hidden_activation, data_format=data_format,
+                         scalar_hidden_layers=scalar_hidden_layers, scaler_hidden_neurons=scaler_hidden_neurons,
+                         output_type=output_type, pooling=pooling, use_dropout=use_dropout,
                          dropout_alpha=dropout_alpha, optimizer=optimizer, loss=loss, metrics=metrics,
                          leaky_alpha=leaky_alpha,
                          batch_size=batch_size, epochs=epochs, verbose=verbose, learning_rate=learning_rate)
@@ -239,12 +287,14 @@ class ResNet(StandardConvNet):
         out = Add()([y, x])
         return out
 
-    def build_network(self, input_shape, output_size):
-        input_layer = Input(shape=input_shape, name="scn_input")
-        num_conv_layers = int(np.log2(input_shape[1]) - np.log2(self.min_data_width))
+    def build_network(self, scalar_input_shape, conv_input_shape, output_size):
+        conv_input_layer = Input(shape=conv_input_shape, name="conv_input")
+        scalar_input_layer = Input(shape=(scalar_input_shape,), name="scalar_input")
+        num_conv_layers = int(np.round((np.log(conv_input_shape[1]) - np.log(self.min_data_width))
+                                       / np.log(self.pooling_width)))
         print(num_conv_layers)
         num_filters = self.min_filters
-        res_model = input_layer
+        res_model = conv_input_layer
         for c in range(num_conv_layers):
             res_model = self.residual_block(num_filters, res_model, c)
             num_filters = int(num_filters * self.filter_growth_rate)
@@ -253,8 +303,23 @@ class ResNet(StandardConvNet):
             else:
                 res_model = AveragePooling2D(data_format=self.data_format, name="pooling_{0:02d}".format(c))(res_model)
         res_model = Flatten(name="flatten")(res_model)
+        scalar_model = scalar_input_layer
+        for h in range(self.scalar_hidden_layers):
+            scalar_model = Dense(self.scalar_hidden_neurons, name=f"scalar_dense_{h:02d}")(scalar_model)
+            if self.hidden_activation == "leaky":
+                scalar_model = LeakyReLU(self.leaky_alpha, name=f"hidden_scalar_activation_{h:02d}")(scalar_model)
+            else:
+                scalar_model = Activation(self.hidden_activation, name=f"hidden_scalar_activation_{h:02d}")(
+                    scalar_model)
+        res_model = Concatenate()([scalar_model, res_model])
         if self.use_dropout:
             res_model = Dropout(self.dropout_alpha, name="dense_dropout")(res_model)
-        res_model = Dense(output_size, name="dense_output")(res_model)
-        res_model = Activation(self.output_activation, name="activation_output")(res_model)
-        self.model = Model(input_layer, res_model)
+        if self.output_type == "linear":
+            res_model = Dense(output_size, name="dense_output")(res_model)
+            res_model = Activation("linear", name="activation_output")(res_model)
+        elif self.output_type == "gaussian":
+            res_model = NormOut()(res_model)
+        elif "mixture" in self.output_type:
+            num_mixtures = int(self.output_type.split("_")[1])
+            res_model = GaussianMixtureOut(mixtures=num_mixtures)(res_model)
+        self.model = Model([scalar_input_layer, conv_input_layer], res_model)
