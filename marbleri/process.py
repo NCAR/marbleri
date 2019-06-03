@@ -196,6 +196,8 @@ def hwrf_step_local_sums(hwrf_filename, variable_levels):
     sum_counts = np.zeros((len(variable_levels), 601, 601, 2))
     for v, var_level in enumerate(variable_levels):
         var_data = hwrf_data.get_variable(var_level[0], var_level[1]).values
+        if np.count_nonzero(var_data > 1e7) > 0:
+            print(hwrf_filename, var_level[0], var_level[1])
         var_data[var_data > 1e7] = np.nan
         sum_counts[v, :, :, 0] = np.where(~np.isnan(var_data), var_data, 0)
         sum_counts[v, :, :, 1] = np.where(~np.isnan(var_data), 1, 0)
