@@ -1,6 +1,93 @@
 import numpy as np
 from keras.utils import Sequence
 from .nwp import HWRFStep
+from .process import get_hwrf_filenames
+import pandas as pd
+import xarray as xr
+
+
+def partition_storm_examples(best_track_data, num_ranks, validation_proportion=0.2):
+    """
+    Separates data into training and validation sets by storm name.
+
+    Args:
+        best_track_data: `pandas.DataFrame` containing best track storm data
+        num_ranks: Number of MPI ranks (processes)
+        validation_proportion: Proportion from 0 to 1 of the best_track examples to be used for validation
+
+    Returns:
+        train_rank_indices: dictionary of best_track_data indices for each MPI rank
+    """
+    full_names = best_track_data["STNAM"].astype(str) + best_track_data["STNUM"].astype(str) \
+        + best_track_data["BASIN"].astype(str) + best_track_data["DATE"].astype(str).str[:4]
+    unique_names = np.unique(full_names.values)
+    num_unique = unique_names.size
+    num_validation = int(num_unique * validation_proportion)
+    num_train = num_unique - num_validation
+    name_indices = np.random.permutation(np.arange(unique_names.shape[0]))
+    train_names = unique_names[name_indices[:num_train]]
+    val_names = unique_names[name_indices[:num_train]]
+    train_indices = np.where(np.in1d(full_names.values, train_names))[0]
+    val_indices = np.where(np.in1d(full_names.values, val_names))[0]
+    np.random.shuffle(train_indices)
+    np.random.shuffle(val_indices)
+    train_rank_indices = {}
+    val_rank_indices = {0: val_indices}
+    train_rank_size = train_indices.size // num_ranks
+    val_rank_size = val_indices.size // num_ranks
+    for i in range(num_ranks):
+        train_rank_indices[i] = train_indices[i * train_rank_size: (i + 1) * train_rank_size]
+        if i > 0:
+            val_rank_indices[i] = None
+    return train_rank_indices, val_rank_indices
+
+
+class BestTrackSequence(Sequence):
+    def __init__(self, best_track_data, best_track_inputs, best_track_output,
+                 hwrf_inputs, batch_size, hwrf_path, shuffle=True, data_format="channels_last", domain_width=601):
+        self.best_track_data = best_track_data.reset_index()
+        self.best_track_inputs = best_track_inputs
+        self.best_track_output = best_track_output
+        self.hwrf_inputs = hwrf_inputs
+        self.hwrf_path = hwrf_path
+        self.batch_size = batch_size
+        self.hwrf_filenames = np.array(get_hwrf_filenames(self.best_track_data, hwrf_path))
+        self.shuffle = shuffle
+        self.domain_width = domain_width
+        self.data_format = data_format
+        if self.data_format == "channels_first":
+            self.conv_batch_shape = (self.batch_size, len(self.hwrf_inputs), self.domain_width, self.domain_width)
+        else:
+            self.conv_batch_shape = (self.batch_size, self.domain_width, self.domain_width, len(self.hwrf_inputs))
+        self.indices = np.arange(self.best_track_data.shape[0])
+        if self.shuffle:
+            np.random.shuffle(self.indices)
+
+    def __len__(self):
+        return int(np.floor(self.indices.size / self.batch_size))
+
+    def __getitem__(self, index):
+        batch_indices = self.indices[index*self.batch_size:(index+1)*self.batch_size]
+        scalar_inputs = self.best_track_data.loc[batch_indices, self.best_track_inputs].values
+        hwrf_batch_files = self.hwrf_filenames[batch_indices]
+        output = self.best_track_data.loc[batch_indices, self.best_track_output].values
+        conv_inputs = np.zeros(self.conv_batch_shape, dtype=np.float32)
+        for h, hwrf_file in enumerate(hwrf_batch_files):
+            hwrf_ds = xr.open_dataset(hwrf_file, decode_cf=False, decode_coords=False, decode_times=False,
+                                      engine="netcdf4")
+            if self.data_format == "channels_last":
+                conv_inputs[h] = hwrf_ds["hwrf_norm"].transpose("lat", "lon", "variable").values
+            else:
+                conv_inputs[h] = hwrf_ds["hwrf_norm"].values
+            hwrf_ds.close()
+        return [scalar_inputs, conv_inputs], output
+
+    def on_epoch_end(self):
+        if self.shuffle:
+            np.random.shuffle(self.indices)
+
+
+
 
 
 class HWRFSequence(Sequence):
@@ -63,3 +150,5 @@ class HWRFSequence(Sequence):
                                                                     hwrf_data.storm_number,
                                                                     hwrf_data.basin, hwrf_data.forecast_hour)
         return [all_hwrf_patches, all_best_track_input_data], all_best_track_label_data
+
+
