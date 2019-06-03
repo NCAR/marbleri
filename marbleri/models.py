@@ -8,6 +8,7 @@ import numpy as np
 import keras.backend as K
 import tensorflow_probability as tfp
 tfd = tfp.distributions
+from horovod.keras import DistributedOptimizer
 
 
 class NormOut(Layer):
@@ -106,18 +107,18 @@ class StandardConvNet(object):
     """
 
     def __init__(self, min_filters=16, filter_growth_rate=2, filter_width=5, min_data_width=4, pooling_width=2,
-                 scalar_hidden_layers=1, scaler_hidden_neurons=30,
+                 scalar_hidden_layers=1, scalar_hidden_neurons=30,
                  hidden_activation="relu", output_type="linear",
                  pooling="mean", use_dropout=False, dropout_alpha=0.0,
                  data_format="channels_first", optimizer="adam", loss="mse", leaky_alpha=0.1, metrics=None,
-                 learning_rate=0.001, batch_size=1024, epochs=10, verbose=0):
+                 learning_rate=0.001, batch_size=1024, epochs=10, verbose=0, distributed=False):
         self.min_filters = min_filters
         self.filter_width = filter_width
         self.filter_growth_rate = filter_growth_rate
         self.pooling_width = pooling_width
         self.min_data_width = min_data_width
         self.scalar_hidden_layers = scalar_hidden_layers
-        self.scalar_hidden_neurons = scaler_hidden_neurons
+        self.scalar_hidden_neurons = scalar_hidden_neurons
         self.hidden_activation = hidden_activation
         self.output_type = output_type
         self.use_dropout = use_dropout
@@ -134,6 +135,7 @@ class StandardConvNet(object):
         self.model = None
         self.parallel_model = None
         self.verbose = verbose
+        self.distributed = distributed
 
     def build_network(self, scalar_input_shape, conv_input_shape, output_size):
         """
@@ -193,6 +195,8 @@ class StandardConvNet(object):
             opt = Adam(lr=self.learning_rate)
         else:
             opt = SGD(lr=self.learning_rate, momentum=0.99)
+        if self.distributed:
+            opt = DistributedOptimizer(opt)
         self.model.compile(opt, losses[self.loss], metrics=self.metrics)
 
     def compile_parallel_model(self, num_gpus):
@@ -216,7 +220,16 @@ class StandardConvNet(object):
             output_size = y.shape[1]
         return x[0].shape[1], x[1].shape[1:], output_size
 
-    def fit(self, x, y, val_x=None, val_y=None, build=True):
+    @staticmethod
+    def get_generator_data_shapes(data_gen):
+        inputs, outputs = data_gen.__getitem__(0)
+        if len(outputs.shape) == 1:
+            output_size = 1
+        else:
+            output_size = outputs.shape[1]
+        return inputs[0].shape[1], inputs[1].shape[1:], output_size
+
+    def fit(self, x, y, val_x=None, val_y=None, build=True, **kwargs):
         """
         Train the neural network.
         """
@@ -229,7 +242,15 @@ class StandardConvNet(object):
         else:
             val_data = (val_x, val_y)
         self.model.fit(x, y, batch_size=self.batch_size, epochs=self.epochs, verbose=self.verbose,
-                       validation_data=val_data)
+                       validation_data=val_data, **kwargs)
+
+    def fit_generator(self, generator, build=True, validation_generator=None, **kwargs):
+        if build:
+            x_scalar_shape, x_conv_shape, y_size = self.get_generator_data_shapes(generator)
+            self.build_network(x_scalar_shape, x_conv_shape, y_size)
+            self.compile_model()
+        self.model.fit_generator(generator, epochs=self.epochs, verbose=self.verbose,
+                                 validation_data=validation_generator, **kwargs)
 
     def predict(self, x, y):
         return self.model.predict(x, y, batch_size=self.batch_size)

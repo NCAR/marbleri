@@ -7,6 +7,16 @@ import xarray as xr
 
 
 def get_hwrf_filenames(best_track_df, hwrf_path):
+    """
+    Assemble the HWRF file names from the columns of the best track dataframe.
+
+    Args:
+        best_track_df:
+        hwrf_path:
+
+    Returns:
+
+    """
     hwrf_filenames = []
     for i in range(best_track_df.shape[0]):
         storm_name = best_track_df.loc[i, "STNAM"]
