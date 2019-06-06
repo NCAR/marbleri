@@ -1,7 +1,7 @@
 import argparse
 import yaml
 from os.path import exists, join
-from os import makedirs
+from os import makedirs, environ
 import horovod.keras as hvd
 from mpi4py import MPI
 import keras.backend as K
@@ -11,6 +11,7 @@ from marbleri.training import partition_storm_examples, BestTrackSequence
 from marbleri.models import StandardConvNet, ResNet
 from keras.callbacks import ModelCheckpoint, CSVLogger
 import numpy as np
+from sklearn.preprocessing import StandardScaler
 
 models = {"StandardConvNet": StandardConvNet,
           "ResNet": ResNet}
@@ -40,18 +41,23 @@ def main():
     if rank == 0:
         train_rank_indices, val_rank_indices = partition_storm_examples(best_track, hvd.size(),
                                                                         config["validation_proportion"])
+        all_train_indices = np.concatenate(list(train_rank_indices.values()))
+        best_track_scaler = StandardScaler()
+        best_track_scaler.fit(best_track.loc[all_train_indices, config["best_track_inputs"]])
     else:
         train_rank_indices = None
         val_rank_indices = None
+        best_track_scaler = None
     train_rank_indices = comm.bcast(train_rank_indices, root=0)
     val_rank_indices = comm.bcast(val_rank_indices, root=0)
-    print("Rank", rank, train_rank_indices[rank], len(train_rank_indices[rank]))
+    best_track_scaler = comm.bcast(best_track_scaler, root=0)
     best_track_train_rank = best_track.loc[train_rank_indices[rank]]
-    train_gen = BestTrackSequence(best_track_train_rank, config["best_track_inputs"], config["best_track_output"],
+    print("Rank", rank, train_rank_indices[rank], len(train_rank_indices[rank]))
+    train_gen = BestTrackSequence(best_track_train_rank, best_track_scaler, config["best_track_inputs"], config["best_track_output"],
                                   config["hwrf_variables"], config["batch_size"], config["hwrf_norm_data_path"])
     if rank == 0:
         best_track_val_rank = best_track.loc[val_rank_indices[rank]]
-        val_gen = BestTrackSequence(best_track_val_rank, config["best_track_inputs"], config["best_track_output"],
+        val_gen = BestTrackSequence(best_track_val_rank, best_track_scaler, config["best_track_inputs"], config["best_track_output"],
                                   config["hwrf_variables"], config["batch_size"], config["hwrf_norm_data_path"])
     else:
         val_gen = None
@@ -60,16 +66,16 @@ def main():
     for model_name, model_config in config["models"].items():
         print(model_name)
         model_objs[model_name] = models[model_config["model_type"]](**model_config["config"])
-        # train neural networks
+    # train neural networks
         callbacks = [hvd.callbacks.BroadcastGlobalVariablesCallback(0)]
         if rank == 0:
             full_model_out_path = join(config["model_out_path"], model_name)
             if not exists(full_model_out_path):
                 makedirs(full_model_out_path)
             callbacks.extend([ModelCheckpoint(join(full_model_out_path, model_name + "_e_{epoch}.h5")),
-                              CSVLogger(join(full_model_out_path, model_name + "_log.csv"))])
+                            CSVLogger(join(full_model_out_path, model_name + "_log.csv"))])
         model_objs[model_name].fit_generator(train_gen, build=True, validation_generator=val_gen,
-                                             callbacks=callbacks)
+                                             max_queue_size=10, workers=8, use_multiprocessing=True, callbacks=callbacks)
     return
 
 

@@ -13,8 +13,6 @@ requires = ["numpy>=1.14",
             "matplotlib>=2.0",
             "xarray",
             "netcdf4",
-            "tensorflow>=1.8",
-            "keras",
             "scikit-learn>=0.2"]
 
 if __name__ == "__main__":

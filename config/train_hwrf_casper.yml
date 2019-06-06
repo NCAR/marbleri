@@ -1,15 +1,23 @@
 hwrf_norm_data_path: "/glade/p/ral/allral/dgagne/hfip/processed_data/hwrf/"
 best_track_data_path: "/glade/p/ral/allral/dgagne/hfip/processed_data/best_track_all.csv"
 model_out_path: "/glade/p/ral/allral/dgagne/hfip/hfip_models/"
-hwrf_variables: ["TMP_P0_L100_GLL0", "TMP_P0_L103_GLL0", "RH_P0_L100_GLL0", "RH_P0_L103_GLL0",
-                 "UGRD_P0_L100_GLL0", "UGRD_P0_L103_GLL0", "VGRD_P0_L100_GLL0", "VGRD_P0_L103_GLL0",
-                 "PWAT_P0_L200_GLL0", "CAPE_P0_L1_GLL0"]
+hwrf_variables: ['TMP_P0_L100_GLL0_20000', 'TMP_P0_L100_GLL0_50000',
+       'TMP_P0_L100_GLL0_70000', 'TMP_P0_L100_GLL0_85000',
+       'TMP_P0_L103_GLL0_surface', 'RH_P0_L100_GLL0_20000',
+       'RH_P0_L100_GLL0_50000', 'RH_P0_L100_GLL0_70000',
+       'RH_P0_L100_GLL0_85000', 'RH_P0_L103_GLL0_surface',
+       'UGRD_P0_L100_GLL0_20000', 'UGRD_P0_L100_GLL0_50000',
+       'UGRD_P0_L100_GLL0_70000', 'UGRD_P0_L100_GLL0_85000',
+       'UGRD_P0_L103_GLL0_surface', 'VGRD_P0_L100_GLL0_20000',
+       'VGRD_P0_L100_GLL0_50000', 'VGRD_P0_L100_GLL0_70000',
+       'VGRD_P0_L100_GLL0_85000', 'VGRD_P0_L103_GLL0_surface',
+       'PWAT_P0_L200_GLL0_surface', 'CAPE_P0_L1_GLL0_surface']
 best_track_inputs: ["TIME", "LAT", "VMAX", "RMW", "MIN_SLP", "SHR_MAG", "SHR_HDG", "STM_SPD",
                          "STM_HDG", "SST", "TPW", "LAND", ]
 best_track_output: "vmax_bt_newer"
 random_seed: 242907
 validation_proportion: 0.2
-batch_size: 128
+batch_size: 64
 models:
   conv_small:
     model_type: "StandardConvNet"
@@ -19,10 +27,11 @@ models:
       scalar_hidden_layers: 2
       scalar_hidden_neurons: 100
       output_type: "gaussian"
+      loss: "crps_norm"
       pooling: "max"
       data_format: "channels_first"
       optimizer: "sgd"
-      batch_size: 512
-      epochs: 30
+      batch_size: 64
+      epochs: 10
       verbose: 1
       distributed: 1

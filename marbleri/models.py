@@ -146,10 +146,13 @@ class StandardConvNet(object):
             conv_input_shape (tuple of shape [variable, y, x]): The shape of the input data
             output_size: Number of neurons in output layer.
         """
+        print("Scalar input shape", scalar_input_shape)
+        print("Conv input shape", conv_input_shape)
         scalar_input_layer = Input(shape=(scalar_input_shape,), name="scalar_input")
         conv_input_layer = Input(shape=conv_input_shape, name="conv_input")
         num_conv_layers = int(np.round((np.log(conv_input_shape[1]) - np.log(self.min_data_width))
                                        / np.log(self.pooling_width)))
+        print(num_conv_layers)
         num_filters = self.min_filters
         scn_model = conv_input_layer
         for c in range(num_conv_layers):
@@ -186,6 +189,7 @@ class StandardConvNet(object):
             num_mixtures = int(self.output_type.split("_")[1])
             scn_model = GaussianMixtureOut(mixtures=num_mixtures)(scn_model)
         self.model = Model([scalar_input_layer, conv_input_layer], scn_model)
+        print(self.model.summary())
 
     def compile_model(self):
         """

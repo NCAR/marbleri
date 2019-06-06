@@ -43,9 +43,10 @@ def partition_storm_examples(best_track_data, num_ranks, validation_proportion=0
 
 
 class BestTrackSequence(Sequence):
-    def __init__(self, best_track_data, best_track_inputs, best_track_output,
-                 hwrf_inputs, batch_size, hwrf_path, shuffle=True, data_format="channels_last", domain_width=601):
+    def __init__(self, best_track_data, best_track_scaler, best_track_inputs, best_track_output,
+                 hwrf_inputs, batch_size, hwrf_path, shuffle=True, data_format="channels_first", domain_width=601):
         self.best_track_data = best_track_data.reset_index()
+        self.best_track_scaler = best_track_scaler
         self.best_track_inputs = best_track_inputs
         self.best_track_output = best_track_output
         self.hwrf_inputs = hwrf_inputs
@@ -59,6 +60,7 @@ class BestTrackSequence(Sequence):
             self.conv_batch_shape = (self.batch_size, len(self.hwrf_inputs), self.domain_width, self.domain_width)
         else:
             self.conv_batch_shape = (self.batch_size, self.domain_width, self.domain_width, len(self.hwrf_inputs))
+        self.best_track_norm = self.best_track_scaler.transform(self.best_track_data[self.best_track_inputs])
         self.indices = np.arange(self.best_track_data.shape[0])
         if self.shuffle:
             np.random.shuffle(self.indices)
@@ -68,7 +70,7 @@ class BestTrackSequence(Sequence):
 
     def __getitem__(self, index):
         batch_indices = self.indices[index*self.batch_size:(index+1)*self.batch_size]
-        scalar_inputs = self.best_track_data.loc[batch_indices, self.best_track_inputs].values
+        scalar_inputs = self.best_track_norm[batch_indices]
         hwrf_batch_files = self.hwrf_filenames[batch_indices]
         output = self.best_track_data.loc[batch_indices, self.best_track_output].values
         conv_inputs = np.zeros(self.conv_batch_shape, dtype=np.float32)
