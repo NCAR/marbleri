@@ -135,7 +135,7 @@ def calculate_hwrf_local_norms(hwrf_files, variable_levels, subset_indices, out_
     for s, split_point in enumerate(split_points[:-1]):
         print(split_point, split_points[s +1])
         hwrf_futures.append(dask_client.submit(hwrf_set_local_variances, hwrf_files[split_point:split_points[s+1]],
-                                               variable_levels, local_mean))
+                                               variable_levels, local_mean, subset_indices))
     local_stats[:, :, :, 2:4] = np.sum(dask_client.gather(hwrf_futures), axis=0)
     local_stats[:, :, :, 5] = np.sqrt(local_stats[:, :, :, 2] / (local_stats[:, :, :, 3] - 1.0))
     local_stat_data = xr.DataArray(local_stats, dims=("variable", "lat", "lon", "statistic"),
