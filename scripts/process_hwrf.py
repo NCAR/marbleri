@@ -1,11 +1,12 @@
 from marbleri.nwp import BestTrackNetCDF
-from marbleri.process import process_hwrf_run, calculate_hwrf_global_norms, calculate_hwrf_local_norms
+from marbleri.process import calculate_hwrf_global_norms, calculate_hwrf_local_norms
 from marbleri.process import process_all_hwrf_runs, get_hwrf_filenames
 import argparse
 from os.path import join, exists
 import yaml
 from dask.distributed import LocalCluster, Client
 import os
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -27,6 +28,8 @@ def main():
     # calculate derived variables in data frame
     hwrf_variables = config["hwrf_variables"]
     hwrf_levels = config["hwrf_levels"]
+    subset_indices = tuple(config["subset_indices"])
+    assert len(subset_indices) == 2
     hwrf_variable_levels = []
     for var in hwrf_variables:
         if "L100" in var:
@@ -48,20 +51,22 @@ def main():
         print(cluster)
         if config["normalize"] == "local":
             print("local normalization")
-            norm_values = calculate_hwrf_local_norms(hwrf_files, hwrf_variable_levels, config["out_path"], client, config["n_workers"])
+            norm_values = calculate_hwrf_local_norms(hwrf_files, hwrf_variable_levels, subset_indices,
+                                                     config["out_path"], client, config["n_workers"])
             global_norm = False
         else:
             print("global normalization")
             norm_values = calculate_hwrf_global_norms(hwrf_files, hwrf_variable_levels, config["out_path"], client)
             global_norm = True
-        hwrf_out = join(config["out_path"], "hwrf")
-        if not exists(hwrf_out):
-            os.makedirs(hwrf_out)
+        hwrf_out_path = config["out_path"]
+        hwrf_out_file = config[""]
+        if not exists(hwrf_out_path):
+            os.makedirs(hwrf_out_path)
         # in parallel extract variables from each model run, subset center from rest of grid and save to other
         # netCDF files
         print("process HWRF runs")
-        process_all_hwrf_runs(hwrf_files, hwrf_variable_levels, norm_values, global_norm, 
-                              hwrf_out, config["n_workers"], client)
+        process_all_hwrf_runs(hwrf_files, hwrf_variable_levels, subset_indices, norm_values, global_norm,
+                              hwrf_out_path, hwrf_out_file, config["n_workers"], client)
         client.close()
         cluster.close()
 

@@ -3,10 +3,12 @@ best_track_variables: ["TIME", "LON", "LAT","VMAX", "RMW", "MIN_SLP", "SHR_MAG",
                        "STM_HDG", "SST", "TPW", "LAND", "vmax_bt_newer"]
 hwrf_variables: ["TMP_P0_L100_GLL0", "TMP_P0_L103_GLL0", "RH_P0_L100_GLL0", "RH_P0_L103_GLL0",
                  "UGRD_P0_L100_GLL0", "UGRD_P0_L103_GLL0", "VGRD_P0_L100_GLL0", "VGRD_P0_L103_GLL0",
-                 "PWAT_P0_L200_GLL0", "CAPE_P0_L1_GLL0"]
-hwrf_levels: [20000, 50000, 70000, 85000]
+                 "PWAT_P0_L200_GLL0"]
+hwrf_levels: [50000, 70000, 85000]
+subset_indices: [108, 492]
 hwrf_path: "/glade/p/ral/nsap/rozoff/hfip/reforecast/"
 out_path: "/glade/p/ral/allral/dgagne/hfip/processed_data/"
+out_file: "hwrf_norm_out_20190606.nc"
 process_hwrf: 1
 normalize: "local"
 n_workers: 34
