@@ -153,7 +153,7 @@ def hwrf_set_local_sums(hwrf_files, variable_levels, subset_indices):
     for h, hwrf_file in enumerate(hwrf_files):
         if h % 5 == 0:
             print("Mean ", h, h * 100 / num_hwrf_files, hwrf_file)
-        sum_counts += hwrf_step_local_sums(hwrf_file, variable_levels)
+        sum_counts += hwrf_step_local_sums(hwrf_file, variable_levels, subset_indices)
     return sum_counts
 
 
