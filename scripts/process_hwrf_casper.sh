@@ -8,7 +8,7 @@
 #SBATCH --mem=256G
 #SBATCH --output=hwrf_proc.%j.out
 module purge
-module load gnu/7.3.0 openmpi-x/3.1.0 python/3.6.8 cuda/10.1
+module load gnu/7.3.0 openmpi/3.1.2 python/3.6.8 cuda/10.0
 source /glade/work/dgagne/ncar_pylib_dl_10/bin/activate
 cd ~/marbleri/
 export OMP_NUM_THREADS=1

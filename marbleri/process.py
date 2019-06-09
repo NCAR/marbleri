@@ -42,28 +42,59 @@ def process_all_hwrf_runs(hwrf_files, variable_levels, subset_indices, norm_valu
     return
 
 
-def process_hwrf_run_set(hwrf_files, variable_levels, out_path, out_file, norm_values, global_norm=False, subset_indices=None):
+def process_hwrf_run_set(hwrf_files, variable_levels, subset_indices, out_path, out_file, norm_values, global_norm=False, save_interval=100):
+    lock = Lock("hwrf_out")
+    full_out_name = join(out_path, out_file)
     exit_code_sum = 0 
     num_hwrf_files = len(hwrf_files)
+    hwrf_arrays = []
+    coord_vars = ["variable", "y", "x"]
     for h, hwrf_file in enumerate(hwrf_files):
-        if h % 5 == 0:
-            print("Processing ", h, h * 100 / num_hwrf_files, hwrf_file)
-        exit_code_sum += process_hwrf_run(hwrf_file, variable_levels, subset_indices, out_path, out_file, norm_values, global_norm=global_norm)
-    return exit_code_sum
+        hwrf_arrays.append(process_hwrf_run(hwrf_file, variable_levels, subset_indices, out_path, out_file, norm_values, global_norm=global_norm))
+        if h % save_interval == 0:
+            print("Saving ", h, h * 100 / num_hwrf_files, hwrf_file)
+            ds = xr.merge(hwrf_arrays)
+            encoding = {}
+            for variable in list(ds.variables.keys()):
+                if variable not in coord_vars:
+                    encoding[variable] = {"zlib": True, "complevel": 3}
+            lock.acquire()
+            if not exists(full_out_name):
+                mode = "w"
+            else:
+                mode = "a"
+            ds.to_netcdf(full_out_name, mode=mode,
+                        encoding=encoding)
+            lock.release()
+            del ds
+            del hwrf_arrays[:]
+    if len(hwrf_arrays) > 0:
+        ds = xr.merge(hwrf_arrays)
+        encoding = {}
+        for variable in list(ds.variables.keys()):
+            if variable not in coord_vars:
+                encoding[variable] = {"zlib": True, "complevel": 3}
+        lock.acquire()
+        if not exists(full_out_name):
+            mode = "w"
+        else:
+            mode = "a"
+        ds.to_netcdf(full_out_name, mode=mode,
+                    encoding=encoding)
+        lock.release()
+    return 0
 
 
 def process_hwrf_run(hwrf_filename, variable_levels, subset_indices,
                      out_path, out_file, norm_values, global_norm=False):
-    lock = Lock("hwrf_out")
-    full_out_name = join(out_path, out_file)
     hwrf_data = HWRFStep(hwrf_filename)
     subset_start = subset_indices[0]
     subset_end = subset_indices[1]
     subset_width = subset_end - subset_start
     all_norm_values = np.zeros((len(variable_levels), subset_width, subset_width), dtype=np.float32)
     var_level_str = get_var_level_strings(variable_levels)
-    lon = xr.DataArray(hwrf_data.ds["lon_0"][slice(subset_start, subset_end)].values, dims=("x",))
-    lat = xr.DataArray(hwrf_data.ds["lat_0"][slice(subset_end, subset_start, -1)].values, dims=("y",))
+    #lon = xr.DataArray(hwrf_data.ds["lon_0"][slice(subset_start, subset_end)].values, dims=("x",))
+    #lat = xr.DataArray(hwrf_data.ds["lat_0"][slice(subset_end, subset_start, -1)].values, dims=("y",))
     for v, var_level in enumerate(variable_levels):
         var_values = hwrf_data.get_variable(*var_level, subset=subset_indices).values
         if global_norm:
@@ -77,19 +108,9 @@ def process_hwrf_run(hwrf_filename, variable_levels, subset_indices,
     ds = xr.DataArray(all_norm_values, dims=("variable", "y", "x"), coords={"variable": var_level_str,
                                                                                 "y": np.arange(subset_width),
                                                                                 "x": np.arange(subset_width),
-                                                                                "lat" + output_variable: lat,
-                                                                                "lon" + output_variable: lon},
+                                                                                },
                       name=output_variable)
-    lock.acquire()
-    if not exists(full_out_name):
-        mode = "w"
-    else:
-        mode = "a"
-    ds.to_netcdf(full_out_name, mode=mode,
-                 encoding={output_variable: {"zlib": True, "complevel": 3}}
-                 )
-    lock.release()
-    return 0
+    return ds
 
 
 def get_var_level_strings(variable_levels):
@@ -188,7 +209,7 @@ def hwrf_step_local_variances(hwrf_filename, variable_levels, variable_means, su
     hwrf_data = HWRFStep(hwrf_filename)
     sum_counts = np.zeros((len(variable_levels), subset_size, subset_size, 2), dtype=np.float32)
     for v, var_level in enumerate(variable_levels):
-        var_data = hwrf_data.get_variable(var_level[0], var_level[1]).values
+        var_data = hwrf_data.get_variable(var_level[0], var_level[1], subset=subset_indices).values
         var_data[var_data > 1e7] = np.nan
         sum_counts[v, :, :, 0] = np.where(~np.isnan(var_data), (var_data - variable_means[v]) ** 2, 0)
         sum_counts[v, :, :, 1] = np.where(~np.isnan(var_data), 1, 0)

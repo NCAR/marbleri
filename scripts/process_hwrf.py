@@ -3,6 +3,7 @@ from marbleri.process import calculate_hwrf_global_norms, calculate_hwrf_local_n
 from marbleri.process import process_all_hwrf_runs, get_hwrf_filenames
 import argparse
 from os.path import join, exists
+import xarray as xr
 import yaml
 from dask.distributed import LocalCluster, Client
 import os
@@ -49,17 +50,22 @@ def main():
         client = Client(cluster)
         print(client)
         print(cluster)
-        if config["normalize"] == "local":
-            print("local normalization")
-            norm_values = calculate_hwrf_local_norms(hwrf_files, hwrf_variable_levels, subset_indices,
-                                                     config["out_path"], client, config["n_workers"])
-            global_norm = False
-        else:
-            print("global normalization")
-            norm_values = calculate_hwrf_global_norms(hwrf_files, hwrf_variable_levels, config["out_path"], client)
-            global_norm = True
+        #if config["normalize"] == "local":
+        #    print("local normalization")
+        #    norm_values = calculate_hwrf_local_norms(hwrf_files, hwrf_variable_levels, subset_indices,
+        #                                             config["out_path"], client, config["n_workers"])
+        #    global_norm = False
+        #else:
+        #    print("global normalization")
+        #    norm_values = calculate_hwrf_global_norms(hwrf_files, hwrf_variable_levels, config["out_path"], client)
+        #    global_norm = True
+        norm_ds = xr.open_dataset(join(config["out_path"], "hwrf_local_norm_stats.nc"))
+        norm_values = norm_ds["local_norm_stats"].values
+        global_norm = False
         hwrf_out_path = config["out_path"]
-        hwrf_out_file = config[""]
+        hwrf_out_file = config["out_file"]
+        print(hwrf_out_path)
+        print(hwrf_out_file)
         if not exists(hwrf_out_path):
             os.makedirs(hwrf_out_path)
         # in parallel extract variables from each model run, subset center from rest of grid and save to other
