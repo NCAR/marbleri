@@ -107,13 +107,13 @@ def process_hwrf_run(hwrf_filename, variable_levels, subset_indices,
         if np.count_nonzero(np.isnan(var_values)) > 0:
             var_norm_values[np.isnan(var_values)] = 0
         all_norm_values[v] = var_norm_values
-    output_variable = hwrf_filename.split("/")[-1][:-3]
+    #output_variable = hwrf_filename.split("/")[-1][:-3]
     ds = xr.DataArray(all_norm_values, dims=("variable", "y", "x"), coords={"variable": var_level_str,
                                                                                 "y": np.arange(subset_width),
                                                                                 "x": np.arange(subset_width),
                                                                                 "lon": lon,
                                                                                 "lat": lat},
-                      name=output_variable)
+                      name="hwrf_norm")
     ds.to_netcdf(join(out_path, hwrf_filename.split("/")[-1]),
                  encoding={"hwrf_norm": {"zlib": True, "complevel": 3}}
                  )
