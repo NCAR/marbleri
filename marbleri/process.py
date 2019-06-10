@@ -6,14 +6,14 @@ from dask.distributed import as_completed, Lock
 import xarray as xr
 
 
-def get_hwrf_filenames(best_track_df, hwrf_path):
+def get_hwrf_filenames(best_track_df, hwrf_path, extension=".nc"):
     """
     Assemble the HWRF file names from the columns of the best track dataframe.
 
     Args:
-        best_track_df:
-        hwrf_path:
-
+        best_track_df: `pandas.DataFrame` containing information about each HWRF time step
+        hwrf_path: Path to HWRF files
+        extension: type of file containing hwrf data.
     Returns:
 
     """
@@ -24,9 +24,10 @@ def get_hwrf_filenames(best_track_df, hwrf_path):
         basin = best_track_df.loc[i, "BASIN"]
         run_date = best_track_df.loc[i, "DATE"]
         forecast_hour = int(best_track_df.loc[i, "TIME"])
-        hwrf_filename = join(hwrf_path, f"{storm_name}{storm_number:02d}{basin}.{run_date}.f{forecast_hour:03d}.nc")
+        hwrf_filename = join(hwrf_path,
+                             f"{storm_name}{storm_number:02d}{basin}.{run_date}.f{forecast_hour:03d}" + extension)
         hwrf_filenames.append(hwrf_filename)
-    return hwrf_filenames
+    return np.array(hwrf_filenames)
 
 
 def process_all_hwrf_runs(hwrf_files, variable_levels, subset_indices, norm_values, global_norm, out_path,

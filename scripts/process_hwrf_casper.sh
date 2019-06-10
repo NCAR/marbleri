@@ -3,7 +3,7 @@
 #SBATCH --account=P48503002
 #SBATCH --ntasks=36
 #SBATCH --cpus-per-task=1
-#SBATCH --time=6:00:00
+#SBATCH --time=12:00:00
 #SBATCH --partition=dav
 #SBATCH --mem=256G
 #SBATCH --output=hwrf_proc.%j.out
