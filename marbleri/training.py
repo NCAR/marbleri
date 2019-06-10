@@ -44,7 +44,7 @@ def partition_storm_examples(best_track_data, num_ranks, validation_proportion=0
 
 class BestTrackSequence(Sequence):
     def __init__(self, best_track_data, best_track_scaler, best_track_inputs, best_track_output,
-                 hwrf_inputs, batch_size, hwrf_file, shuffle=True, data_format="channels_first", domain_width=601):
+                 hwrf_inputs, batch_size, hwrf_file, shuffle=True, data_format="channels_first", domain_width=384):
         self.best_track_data = best_track_data.reset_index()
         self.best_track_scaler = best_track_scaler
         self.best_track_inputs = best_track_inputs
@@ -62,12 +62,19 @@ class BestTrackSequence(Sequence):
         self.best_track_norm = self.best_track_scaler.transform(self.best_track_data[self.best_track_inputs])
         self.indices = np.arange(self.best_track_data.shape[0])
         self.hwrf_var_names = get_hwrf_filenames(self.best_track_data, "", "")
+        print("start opening", hwrf_file)
         hwrf_ds = xr.open_dataset(hwrf_file, decode_cf=False, decode_coords=False, decode_times=False,
                                   engine="netcdf4")
-        self.conv_inputs = np.zeros((self.hwrf_var_names.size, self.domain_width,
+        print("opened", hwrf_file)
+        if self.data_format == "channels_first":
+            self.conv_inputs = np.zeros((self.hwrf_var_names.size, len(self.hwrf_inputs), self.domain_width,
+                                     self.domain_width),
+                                     dtype=np.float32)
+        else:
+            self.conv_inputs = np.zeros((self.hwrf_var_names.size, self.domain_width,
                                      self.domain_width, len(self.hwrf_inputs)),
                                      dtype=np.float32)
-        for h, hwrf_var in self.hwrf_var_names:
+        for h, hwrf_var in enumerate(self.hwrf_var_names):
             if h % 100 == 0:
                 print(h, hwrf_var)
             if self.data_format == "channels_last":
