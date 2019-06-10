@@ -62,7 +62,7 @@ def main():
         norm_ds = xr.open_dataset(join(config["out_path"], "hwrf_local_norm_stats.nc"))
         norm_values = norm_ds["local_norm_stats"].values
         global_norm = False
-        hwrf_out_path = config["out_path"]
+        hwrf_out_path = join(config["out_path"], "hwrf_norm")
         hwrf_out_file = config["out_file"]
         print(hwrf_out_path)
         print(hwrf_out_file)
