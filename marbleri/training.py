@@ -2,7 +2,6 @@ import numpy as np
 from keras.utils import Sequence
 from .nwp import HWRFStep
 from .process import get_hwrf_filenames
-import pandas as pd
 import xarray as xr
 
 
@@ -44,13 +43,13 @@ def partition_storm_examples(best_track_data, num_ranks, validation_proportion=0
 
 class BestTrackSequence(Sequence):
     def __init__(self, best_track_data, best_track_scaler, best_track_inputs, best_track_output,
-                 hwrf_inputs, batch_size, hwrf_file, shuffle=True, data_format="channels_first", domain_width=384):
+                 hwrf_inputs, batch_size, hwrf_path, shuffle=True, data_format="channels_first", domain_width=384):
         self.best_track_data = best_track_data.reset_index()
         self.best_track_scaler = best_track_scaler
         self.best_track_inputs = best_track_inputs
         self.best_track_output = best_track_output
         self.hwrf_inputs = hwrf_inputs
-        self.hwrf_file = hwrf_file
+        self.hwrf_path = hwrf_path
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.domain_width = domain_width
@@ -61,27 +60,25 @@ class BestTrackSequence(Sequence):
             self.conv_batch_shape = (self.batch_size, self.domain_width, self.domain_width, len(self.hwrf_inputs))
         self.best_track_norm = self.best_track_scaler.transform(self.best_track_data[self.best_track_inputs])
         self.indices = np.arange(self.best_track_data.shape[0])
-        self.hwrf_var_names = get_hwrf_filenames(self.best_track_data, "", "")
-        print("start opening", hwrf_file)
-        hwrf_ds = xr.open_dataset(hwrf_file, decode_cf=False, decode_coords=False, decode_times=False,
-                                  engine="netcdf4")
-        print("opened", hwrf_file)
+        self.hwrf_file_names = get_hwrf_filenames(self.best_track_data, self.hwrf_path, ".nc")
         if self.data_format == "channels_first":
-            self.conv_inputs = np.zeros((self.hwrf_var_names.size, len(self.hwrf_inputs), self.domain_width,
+            self.conv_inputs = np.zeros((self.hwrf_file_names.size, len(self.hwrf_inputs), self.domain_width,
                                      self.domain_width),
                                      dtype=np.float32)
         else:
-            self.conv_inputs = np.zeros((self.hwrf_var_names.size, self.domain_width,
+            self.conv_inputs = np.zeros((self.hwrf_file_names.size, self.domain_width,
                                      self.domain_width, len(self.hwrf_inputs)),
                                      dtype=np.float32)
-        for h, hwrf_var in enumerate(self.hwrf_var_names):
+        for h, hwrf_file_name in enumerate(self.hwrf_file_names):
             if h % 100 == 0:
-                print(h, hwrf_var)
+                print(h * 100 / self.hwrf_file_names.size, hwrf_file_name)
+            hwrf_ds = xr.open_dataset(hwrf_file_name, decode_cf=False, decode_coords=False, decode_times=False,
+                                      autoclose=False)
             if self.data_format == "channels_last":
-                self.conv_inputs[h] = hwrf_ds[hwrf_var].transpose("lat", "lon", "variable").values
+                self.conv_inputs[h] = hwrf_ds["hwrf_norm"].transpose("lat", "lon", "variable").values
             else:
-                self.conv_inputs[h] = hwrf_ds[hwrf_var].values
-        hwrf_ds.close()
+                self.conv_inputs[h] = hwrf_ds["hwrf_norm"].values
+            hwrf_ds.close()
         if self.shuffle:
             np.random.shuffle(self.indices)
 

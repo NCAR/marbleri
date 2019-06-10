@@ -75,7 +75,7 @@ def main():
             callbacks.extend([ModelCheckpoint(join(full_model_out_path, model_name + "_e_{epoch}.h5")),
                             CSVLogger(join(full_model_out_path, model_name + "_log.csv"))])
         model_objs[model_name].fit_generator(train_gen, build=True, validation_generator=val_gen,
-                                             max_queue_size=10, workers=8, use_multiprocessing=True, callbacks=callbacks)
+                                             max_queue_size=10, workers=4, use_multiprocessing=True, callbacks=callbacks)
     return
 
 

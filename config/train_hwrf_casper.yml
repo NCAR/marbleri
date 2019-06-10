@@ -1,6 +1,6 @@
-hwrf_norm_data_path: "/glade/p/ral/allral/dgagne/hfip/processed_data/hwrf_norm_out_20190609.nc"
-best_track_data_path: "/glade/p/ral/allral/dgagne/hfip/processed_data/best_track_all.csv"
-model_out_path: "/glade/p/ral/allral/dgagne/hfip/hfip_models/"
+hwrf_norm_data_path: "/glade/scratch/dgagne/hfip/processed_data/hwrf_norm/"
+best_track_data_path: "/glade/scratch/dgagne/hfip/processed_data/best_track_all.csv"
+model_out_path: "/glade/scratch/dgagne/hfip/hfip_models/"
 hwrf_variables: ['TMP_P0_L100_GLL0_50000',
        'TMP_P0_L100_GLL0_70000', 'TMP_P0_L100_GLL0_85000',
        'TMP_P0_L103_GLL0_surface',
