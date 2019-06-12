@@ -58,7 +58,7 @@ class BestTrackSequence(Sequence):
             self.conv_batch_shape = (self.batch_size, len(self.hwrf_inputs), self.domain_width, self.domain_width)
         else:
             self.conv_batch_shape = (self.batch_size, self.domain_width, self.domain_width, len(self.hwrf_inputs))
-        self.best_track_norm = self.best_track_scaler.transform(self.best_track_data[self.best_track_inputs])
+        self.best_track_norm = self.best_track_scaler.transform(self.best_track_data[self.best_track_inputs]).astype(np.float32)
         self.indices = np.arange(self.best_track_data.shape[0])
         self.hwrf_file_names = get_hwrf_filenames(self.best_track_data, self.hwrf_path, ".nc")
         if self.data_format == "channels_first":
@@ -88,7 +88,7 @@ class BestTrackSequence(Sequence):
     def __getitem__(self, index):
         batch_indices = self.indices[index*self.batch_size:(index+1)*self.batch_size]
         scalar_inputs = self.best_track_norm[batch_indices]
-        output = self.best_track_data.loc[batch_indices, self.best_track_output].values
+        output = self.best_track_data.loc[batch_indices, self.best_track_output].values.astype(np.float32)
         batch_conv_inputs = self.conv_inputs[batch_indices]
         return [scalar_inputs, batch_conv_inputs], output
 

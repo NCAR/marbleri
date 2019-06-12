@@ -3,7 +3,7 @@
 #SBATCH --account=P48503002
 #SBATCH --ntasks=36
 #SBATCH --cpus-per-task=1
-#SBATCH --time=1:00:00
+#SBATCH --time=2:00:00
 #SBATCH --partition=dav
 #SBATCH --gres=gpu:v100:8
 #SBATCH --mem=1000G

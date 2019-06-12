@@ -55,7 +55,7 @@ def main():
     print("Rank", rank, train_rank_indices[rank], len(train_rank_indices[rank]))
     train_gen = BestTrackSequence(best_track_train_rank, best_track_scaler, config["best_track_inputs"], config["best_track_output"],
                                   config["hwrf_variables"], config["batch_size"], config["hwrf_norm_data_path"])
-    if rank == 0:
+    if rank == -1:
         best_track_val_rank = best_track.loc[val_rank_indices[rank]]
         val_gen = BestTrackSequence(best_track_val_rank, best_track_scaler, config["best_track_inputs"], config["best_track_output"],
                                   config["hwrf_variables"], config["batch_size"], config["hwrf_norm_data_path"])
@@ -75,7 +75,7 @@ def main():
             callbacks.extend([ModelCheckpoint(join(full_model_out_path, model_name + "_e_{epoch}.h5")),
                             CSVLogger(join(full_model_out_path, model_name + "_log.csv"))])
         model_objs[model_name].fit_generator(train_gen, build=True, validation_generator=val_gen,
-                                             max_queue_size=10, workers=4, use_multiprocessing=True, callbacks=callbacks)
+                                             max_queue_size=10, workers=1, use_multiprocessing=False, callbacks=callbacks)
     return
 
 
