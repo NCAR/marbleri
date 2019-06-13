@@ -72,8 +72,7 @@ class BestTrackSequence(Sequence):
         for h, hwrf_file_name in enumerate(self.hwrf_file_names):
             if h % 100 == 0:
                 print(h * 100 / self.hwrf_file_names.size, hwrf_file_name)
-            hwrf_ds = xr.open_dataset(hwrf_file_name, decode_cf=False, decode_coords=False, decode_times=False,
-                                      autoclose=False)
+            hwrf_ds = xr.open_dataset(hwrf_file_name, decode_cf=False, decode_coords=False, decode_times=False)
             if self.data_format == "channels_last":
                 self.conv_inputs[h] = hwrf_ds["hwrf_norm"].transpose("lat", "lon", "variable").values
             else:

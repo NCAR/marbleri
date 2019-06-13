@@ -4,6 +4,7 @@ from keras.models import Model
 from keras.optimizers import Adam, SGD
 from keras.losses import mean_squared_error
 from keras.utils import multi_gpu_model
+from keras.regularizers import l2
 import numpy as np
 import keras.backend as K
 import tensorflow_probability as tfp
@@ -13,9 +14,9 @@ from horovod.keras import DistributedOptimizer
 
 class NormOut(Layer):
     def __init__(self, **kwargs):
-        super(NormOut, self).__init__(**kwargs)
-        self.mean_dense = Dense(1)
-        self.sd_dense = Dense(1, activation=K.tf.exp)
+        self.mean_dense = Dense(1, **kwargs)
+        self.sd_dense = Dense(1, activation=K.tf.exp, **kwargs)
+        super(NormOut, self).__init__()
 
     def call(self, inputs, **kwargs):
         mean_x = self.mean_dense(inputs)
@@ -29,10 +30,10 @@ class NormOut(Layer):
 class GaussianMixtureOut(Layer):
     def __init__(self, mixtures=2, **kwargs):
         self.mixtures = mixtures
+        self.mean_dense = Dense(self.mixtures, **kwargs)
+        self.sd_dense = Dense(self.mixtures, activation=K.tf.exp, **kwargs)
+        self.weight_dense = Dense(self.mixtures, **kwargs)
         super(GaussianMixtureOut, self).__init__(**kwargs)
-        self.mean_dense = Dense(self.mixtures)
-        self.sd_dense = Dense(self.mixtures, activation=K.tf.exp)
-        self.weight_dense = Dense(self.mixtures)
 
     def call(self, inputs, **kwargs):
         mean_x = self.mean_dense(inputs)
@@ -111,7 +112,7 @@ class StandardConvNet(object):
                  hidden_activation="relu", output_type="linear",
                  pooling="mean", use_dropout=False, dropout_alpha=0.0,
                  data_format="channels_first", optimizer="adam", loss="mse", leaky_alpha=0.1, metrics=None,
-                 learning_rate=0.001, batch_size=1024, epochs=10, verbose=0, distributed=False):
+                 learning_rate=0.001, batch_size=1024, epochs=10, verbose=0, l2_alpha=0, distributed=False):
         self.min_filters = min_filters
         self.filter_width = filter_width
         self.filter_growth_rate = filter_growth_rate
@@ -134,6 +135,11 @@ class StandardConvNet(object):
         self.epochs = epochs
         self.model = None
         self.parallel_model = None
+        self.l2_alpha = l2_alpha
+        if l2_alpha > 0:
+            self.use_l2 = True
+        else:
+            self.use_l2 = False
         self.verbose = verbose
         self.distributed = distributed
 
@@ -148,6 +154,10 @@ class StandardConvNet(object):
         """
         print("Scalar input shape", scalar_input_shape)
         print("Conv input shape", conv_input_shape)
+        if self.use_l2:
+            reg = l2(self.l2_alpha)
+        else:
+            reg = None
         scalar_input_layer = Input(shape=(scalar_input_shape,), name="scalar_input")
         conv_input_layer = Input(shape=conv_input_shape, name="conv_input")
         num_conv_layers = int(np.round((np.log(conv_input_shape[1]) - np.log(self.min_data_width))
@@ -157,7 +167,8 @@ class StandardConvNet(object):
         scn_model = conv_input_layer
         for c in range(num_conv_layers):
             scn_model = Conv2D(num_filters, (self.filter_width, self.filter_width),
-                               data_format=self.data_format, padding="same", name="conv_{0:02d}".format(c))(scn_model)
+                               data_format=self.data_format, 
+                               kernel_regularizer=reg, padding="same", name="conv_{0:02d}".format(c))(scn_model)
             if self.hidden_activation == "leaky":
                 scn_model = LeakyReLU(self.leaky_alpha, name="hidden_activation_{0:02d}".format(c))(scn_model)
             else:
@@ -172,7 +183,7 @@ class StandardConvNet(object):
         scn_model = Flatten(name="flatten")(scn_model)
         scalar_model = scalar_input_layer
         for h in range(self.scalar_hidden_layers):
-            scalar_model = Dense(self.scalar_hidden_neurons, name=f"scalar_dense_{h:02d}")(scalar_model)
+            scalar_model = Dense(self.scalar_hidden_neurons, kernel_regularizer=reg, name=f"scalar_dense_{h:02d}")(scalar_model)
             if self.hidden_activation == "leaky":
                 scalar_model = LeakyReLU(self.leaky_alpha, name=f"hidden_scalar_activation_{h:02d}")(scalar_model)
             else:

@@ -1,5 +1,5 @@
 hwrf_norm_data_path: "/glade/scratch/dgagne/hfip/processed_data/hwrf_norm/"
-best_track_data_path: "/glade/scratch/dgagne/hfip/processed_data/best_track_all.csv"
+best_track_data_path: "/glade/scratch/dgagne/hfip/processed_data/best_track_sub.csv"
 model_out_path: "/glade/scratch/dgagne/hfip/hfip_models/"
 hwrf_variables: ['TMP_P0_L100_GLL0_50000',
        'TMP_P0_L100_GLL0_70000', 'TMP_P0_L100_GLL0_85000',
@@ -12,27 +12,28 @@ hwrf_variables: ['TMP_P0_L100_GLL0_50000',
        'VGRD_P0_L100_GLL0_50000', 'VGRD_P0_L100_GLL0_70000',
        'VGRD_P0_L100_GLL0_85000', 'VGRD_P0_L103_GLL0_surface',
        'PWAT_P0_L200_GLL0_surface',]
-best_track_inputs: ["TIME", "LON", "LAT","VMAX", "RMW", "MIN_SLP", "SHR_MAG", "SHR_HDG", "STM_SPD",
-                    "STM_HDG", "SST", "TPW", "LAND", "TANG850", "VORT850",
-                    "DVRG200", "VMAXMPI", "IKE1"]
+best_track_inputs: ["TIME", "VMAX", "RMW", "MIN_SLP", "SHR_MAG", "STM_SPD",
+                    "SST", "TPW", "LAND"]
 best_track_output: "vmax_bt_newer"
 random_seed: 242907
-validation_proportion: 0.1
-batch_size: 256
+validation_proportion: 0
+batch_size: 128
 models:
   conv_small:
     model_type: "StandardConvNet"
     config:
-      min_filters: 64
+      min_filters: 20
       pooling_width: 2
       scalar_hidden_layers: 2
-      scalar_hidden_neurons: 100
+      scalar_hidden_neurons: 128
       output_type: "gaussian"
       loss: "crps_norm"
       pooling: "max"
       data_format: "channels_first"
-      optimizer: "sgd"
-      batch_size: 256
-      epochs: 10
+      l2_alpha: 0.0001
+      optimizer: "adam"
+      batch_size: 128
+      epochs: 20
+      learning_rate: 0.01
       verbose: 1
       distributed: 1

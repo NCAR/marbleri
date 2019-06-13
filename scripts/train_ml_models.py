@@ -29,10 +29,10 @@ def main():
         raise FileNotFoundError("Config file {0} not found.".format(args.config))
     with open(args.config, "rb") as config_file:
         config = yaml.load(config_file, yaml.Loader)
-
+    environ["CUDA_VISIBLE_DEVICES"] = str(hvd.local_rank())
     tf_config = tf.ConfigProto()
     tf_config.gpu_options.allow_growth = True
-    tf_config.gpu_options.visible_device_list = str(hvd.local_rank())
+    #tf_config.gpu_options.visible_device_list = "0"
     K.set_session(tf.Session(config=tf_config))
     np.random.seed(config["random_seed"])
     tf.random.set_random_seed(config["random_seed"])
