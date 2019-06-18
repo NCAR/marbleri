@@ -122,6 +122,7 @@ class BestTrackNetCDF(object):
             basin_dfs.append(pd.merge(self.bt_runs[basin], self.bt_ds[basin][variables].to_dataframe(), how="right",
                                       left_index=True, right_index=True))
             print(basin_dfs[-1])
+            
             if dropna:
                 basin_dfs[-1] = basin_dfs[-1].dropna()
         return pd.concat(basin_dfs, ignore_index=True)
