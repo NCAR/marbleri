@@ -25,7 +25,7 @@ def partition_storm_examples(best_track_data, num_ranks, validation_proportion=0
     num_train = num_unique - num_validation
     name_indices = np.random.permutation(np.arange(unique_names.shape[0]))
     train_names = unique_names[name_indices[:num_train]]
-    val_names = unique_names[name_indices[:num_train]]
+    val_names = unique_names[name_indices[num_train:]]
     train_indices = np.where(np.in1d(full_names.values, train_names))[0]
     val_indices = np.where(np.in1d(full_names.values, val_names))[0]
     np.random.shuffle(train_indices)

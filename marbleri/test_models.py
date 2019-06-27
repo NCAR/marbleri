@@ -7,9 +7,25 @@ def test_NormOut():
     input = K.placeholder(shape=(None, 5))
     nout = NormOut()
     norm_func = K.function([input], [nout(input)])
-    result = norm_func([np.zeros((3, 5))])[0]
+    result = norm_func([np.ones((3, 5))])[0]
+    print(result)
     assert result.shape[0] == 3
     assert result.shape[1] == 2
+
+
+def test_crps_norm():
+    y_true = np.random.randint(20, 160, size=(10, 1)).astype(np.float32)
+    #y_pred_mean = np.array(y_true[:, 0])
+    y_pred_mean = np.ones(y_true.shape[0]) * 5
+    y_pred_sd = np.ones(y_true.size) * 5.0
+    y_pred = np.vstack([y_pred_mean, y_pred_sd]).T
+    y_pred_t = K.placeholder(shape=(None, 2))
+    y_true_t = K.placeholder(shape=(None, 1))
+    crps_func = K.function([y_true_t, y_pred_t], [crps_norm(y_true_t, y_pred_t)])
+    assert y_pred.shape[0] == y_true.shape[0]
+    crps_val = crps_func([y_true, y_pred])[0]
+
+    print(crps_val)
 
 
 def test_StandardConvNet():

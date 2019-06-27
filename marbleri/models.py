@@ -5,6 +5,7 @@ from keras.optimizers import Adam, SGD
 from keras.losses import mean_squared_error
 from keras.utils import multi_gpu_model
 from keras.regularizers import l2
+from functools import partial
 import numpy as np
 import keras.backend as K
 import tensorflow_probability as tfp
@@ -30,9 +31,9 @@ class NormOut(Layer):
 class GaussianMixtureOut(Layer):
     def __init__(self, mixtures=2, **kwargs):
         self.mixtures = mixtures
-        self.mean_dense = Dense(self.mixtures, **kwargs)
+        self.mean_dense = Dense(self.mixtures, activation="relu", **kwargs)
         self.sd_dense = Dense(self.mixtures, activation=K.tf.exp, **kwargs)
-        self.weight_dense = Dense(self.mixtures, **kwargs)
+        self.weight_dense = Dense(self.mixtures, activation="softmax", **kwargs)
         super(GaussianMixtureOut, self).__init__(**kwargs)
 
     def call(self, inputs, **kwargs):
@@ -58,10 +59,10 @@ def crps_mixture(y_true, y_pred, cdf_points=np.arange(0, 200.0, 5.0)):
     cdf_points_tensor = K.tf.constant(0.5 * (cdf_points[:-1] + cdf_points[1:]), dtype="float32")
     cdf_point_diffs = K.tf.constant(cdf_points[1:] - cdf_points[:-1], dtype="float32")
     num_mixtures = y_pred.shape[1] // 3
-    y_pred_cdf = K.tf.add_n([y_pred[:, 2 * num_mixtures + i: 2 * num_mixtures + i + 1] *
-                             tfd.Normal(loc=y_pred[:, i:i+1],
-                                        scale=y_pred[:, num_mixtures + i: num_mixtures + i + 1]).cdf(
-        cdf_points_tensor)
+    weights = [y_pred[:, 2 * num_mixtures + i: 2 * num_mixtures + i + 1] for i in range(num_mixtures)]
+    locs = [y_pred[:, i:i+1] for i in range(num_mixtures)]
+    scales = [y_pred[:, num_mixtures + i: num_mixtures + i + 1] for i in range(num_mixtures)]
+    y_pred_cdf = K.tf.add_n([weights[i] * tfd.Normal(loc=locs[i], scale=scales[i]).cdf(cdf_points_tensor)
                              for i in range(num_mixtures)])
     y_true_cdf = K.tf.cast(y_true <= cdf_points_tensor, "float32")
     cdf_diffs = K.tf.reduce_mean((y_pred_cdf - y_true_cdf) ** 2 * cdf_point_diffs, axis=1)
@@ -71,6 +72,106 @@ def crps_mixture(y_true, y_pred, cdf_points=np.arange(0, 200.0, 5.0)):
 losses = {"mse": mean_squared_error,
           "crps_norm": crps_norm,
           "crps_mixture": crps_mixture}
+
+
+class DenseNeuralNet(object):
+    def __init__(self, hidden_layers=1, hidden_neurons=10, activation="relu", learning_rate=0.001,
+                 output_type="linear", optimizer="adam", dropout_alpha=0.0, batch_size=64, epochs=10,
+                 verbose=0, metrics=None, leaky_alpha=0.1, distributed=False):
+        self.hidden_layers = hidden_layers
+        self.hidden_neurons = hidden_neurons
+        self.hidden_activation = activation
+        self.learning_rate = learning_rate
+        self.output_type = output_type
+        self.num_mixtures = 1
+        if output_type == "gaussian":
+            self.loss = losses["crps_norm"]
+        elif "mixture" in output_type:
+            self.num_mixtures = int(output_type.split("_")[1])
+            self.loss = losses["crps_mixture"]
+        else:
+            self.loss = losses["mse"]
+        self.dropout_alpha = dropout_alpha
+        self.optimizer = optimizer
+        self.epochs = epochs
+        self.leaky_alpha = leaky_alpha
+        self.use_dropout = False
+        if self.dropout_alpha > 0:
+            self.use_dropout = True
+        self.batch_size = batch_size
+        self.verbose = verbose
+        self.metrics = metrics
+        self.model = None
+        self.parallel_model = None
+        self.distributed = distributed
+
+    def build_network(self, scalar_input_shape, output_size):
+        ann_input = Input(shape=(scalar_input_shape,))
+        ann_model = ann_input
+        for h in range(self.hidden_layers):
+            if self.use_dropout:
+                ann_model = Dropout(self.dropout_alpha)(ann_model)
+            ann_model = Dense(self.hidden_neurons)(ann_model)
+            if self.hidden_activation == "leaky":
+                ann_model = LeakyReLU(self.leaky_alpha, name=f"hidden_scalar_activation_{h:02d}")(ann_model)
+            else:
+                ann_model = Activation(self.hidden_activation, name=f"hidden_scalar_activation_{h:02d}")(ann_model)
+        if self.output_type == "gaussian":
+            ann_model = NormOut()(ann_model)
+        elif self.output_type.split("_")[0] == "mixture":
+            num_mixtures = int(self.output_type.split("_")[1])
+            ann_model = GaussianMixtureOut(mixtures=num_mixtures)(ann_model)
+        else:
+            ann_model = Dense(output_size)(ann_model)
+        self.model = Model(ann_input, ann_model)
+        print(self.model.summary())
+        return
+
+    def compile_model(self):
+        """
+        Compile the model in tensorflow with the right optimizer and loss function.
+        """
+        if self.optimizer == "adam":
+            opt = Adam(lr=self.learning_rate)
+        else:
+            opt = SGD(lr=self.learning_rate, momentum=0.99)
+        if self.distributed:
+            opt = DistributedOptimizer(opt)
+        self.model.compile(opt, self.loss, metrics=self.metrics)
+
+    def compile_parallel_model(self, num_gpus):
+        self.parallel_model = multi_gpu_model(self.model, num_gpus)
+        if self.optimizer == "adam":
+            opt = Adam(lr=self.learning_rate)
+        else:
+            opt = SGD(lr=self.learning_rate, momentum=0.99)
+
+        self.parallel_model.compile(opt, self.loss, metrics=self.metrics)
+
+    @staticmethod
+    def get_data_shapes(x, y):
+        if len(y.shape) == 2:
+            y_shape = y.shape[1]
+        else:
+            y_shape = 1
+        return x.shape[1], y_shape
+
+    def fit(self, x, y, val_x=None, val_y=None, build=True, **kwargs):
+        if build:
+            x_scalar_shape, y_size = self.get_data_shapes(x, y)
+            self.build_network(x_scalar_shape, y_size)
+            self.compile_model()
+        if val_x is None:
+            val_data = None
+        else:
+            val_data = (val_x, val_y)
+        self.model.fit(x, y, batch_size=self.batch_size, epochs=self.epochs, verbose=self.verbose,
+                       validation_data=val_data,  **kwargs)
+
+    def predict(self, x, **kwargs):
+        return self.model.predict(x, **kwargs)
+
+
 
 
 class StandardConvNet(object):
@@ -142,6 +243,7 @@ class StandardConvNet(object):
             self.use_l2 = False
         self.verbose = verbose
         self.distributed = distributed
+
 
     def build_network(self, scalar_input_shape, conv_input_shape, output_size):
         """
