@@ -43,11 +43,13 @@ def partition_storm_examples(best_track_data, num_ranks, validation_proportion=0
 
 class BestTrackSequence(Sequence):
     def __init__(self, best_track_data, best_track_scaler, best_track_inputs, best_track_output,
-                 hwrf_inputs, batch_size, hwrf_path, shuffle=True, data_format="channels_first", domain_width=384):
+                 hwrf_inputs, batch_size, hwrf_path,
+                 conv_only=False, shuffle=True, data_format="channels_first", domain_width=384):
         self.best_track_data = best_track_data.reset_index()
         self.best_track_scaler = best_track_scaler
         self.best_track_inputs = best_track_inputs
         self.best_track_output = best_track_output
+        self.conv_only = conv_only
         self.hwrf_inputs = hwrf_inputs
         self.hwrf_path = hwrf_path
         self.batch_size = batch_size
@@ -86,17 +88,18 @@ class BestTrackSequence(Sequence):
 
     def __getitem__(self, index):
         batch_indices = self.indices[index*self.batch_size:(index+1)*self.batch_size]
-        scalar_inputs = self.best_track_norm[batch_indices]
         output = self.best_track_data.loc[batch_indices, self.best_track_output].values.astype(np.float32)
         batch_conv_inputs = self.conv_inputs[batch_indices]
-        return [scalar_inputs, batch_conv_inputs], output
+        if not self.conv_only:
+            scalar_inputs = self.best_track_norm[batch_indices]
+            gen_out = ([scalar_inputs, batch_conv_inputs], output)
+        else:
+            gen_out = (batch_conv_inputs, output)
+        return gen_out
 
     def on_epoch_end(self):
         if self.shuffle:
             np.random.shuffle(self.indices)
-
-
-
 
 
 class HWRFSequence(Sequence):
