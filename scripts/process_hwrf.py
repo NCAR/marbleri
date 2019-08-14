@@ -9,6 +9,7 @@ from dask.distributed import LocalCluster, Client
 import os
 import numpy as np
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("config", help="Config filepath")

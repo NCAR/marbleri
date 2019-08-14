@@ -1,0 +1,22 @@
+best_track_path: "/glade/p/ral/allral/dgagne/hfip/processed_data/best_track_dv/"
+best_track_variables: ["TIME", "LON", "LAT","VMAX", "RMW", "MIN_SLP", "SHR_MAG", "SHR_HDG", "STM_SPD",
+                       "STM_HDG", "SST", "TPW", "LAND", "TANG850", "VORT850",
+                       "DVRG200", "RHLO", "RHMD", "RHHI", "CAPE1", "CAPE2", "CAPE3", 
+                       "LHTFL1", "LHTFL2", "LHTFL3", "SHTFL1", "SHTFL2", "SHTFL3", "VMAXMPI", "POTMPI", "TGRD", "IKE1",
+                       "IKE2", "TCOND7001", "TCOND7002", "TCOND7003", "TCONDALL1", "TCONDALL2", "TCONDALL3", "INST1", "INST2", "INST3", 
+                       "CP1", "CP2", "CP3", "TCONDSYM1", "TCONDSYM2", "TCONDSYM3", "INERTSYM1", "INERTSYM2", "INERTSYM3", 
+                       "COUPLSYM1", "COUPLSYM2", "COUPLSYM3", "WALLA1", "WALLA2", "WALLA3", "WSYM1", "WSYM2", "WSYM3", 
+                       "USFC1", "USFC2", "USFC3", "USFCSYM1", "USFCSYM2", "USFCSYM3", 
+                       "vmax_bt_new", "dvmax_bt_12", "dvmax_bt_24", "dvmax_bt_48", "dvmax_bt_72"]
+hwrf_variables: ["THETA_E_L100", "U_RAD_L100", "V_TAN_L100"]
+hwrf_levels: [50000, 70000, 85000]
+subset_indices: [108, 492]
+hwrf_path: "/glade/p/ral/nsap/rozoff/hfip/reforecast_david/"
+out_path: "/glade/scratch/dgagne/hfip/processed_data_dv/"
+out_file: "hwrf_norm_out_20190814.nc"
+process_hwrf: 1
+normalize: "local"
+n_workers: 34
+dask_worker:
+    ncores: 1
+    local_dir: "/glade/scratch/dgagne/dask-worker-space/"
