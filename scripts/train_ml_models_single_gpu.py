@@ -27,12 +27,11 @@ def main():
         config = yaml.load(config_file, yaml.Loader)
     tf_config = tf.ConfigProto()
     tf_config.gpu_options.allow_growth = True
-    rank = 0
-    #tf_config.gpu_options.visible_device_list = "0"
     K.set_session(tf.Session(config=tf_config))
     np.random.seed(config["random_seed"])
     tf.random.set_random_seed(config["random_seed"])
     # load best track data and netCDF data into memory
+    rank = 0
     best_track = pd.read_csv(config["best_track_data_path"])
     train_rank_indices, val_rank_indices = partition_storm_examples(best_track, 1,
                                                                         config["validation_proportion"])
@@ -41,12 +40,9 @@ def main():
     best_track_scaler = None
     train_gen = BestTrackSequence(best_track_train_rank, best_track_scaler, config["best_track_inputs"], config["best_track_output"],
                                   config["hwrf_variables"], config["batch_size"], config["hwrf_norm_data_path"])
-    if rank == -1:
-        best_track_val_rank = best_track.loc[val_rank_indices[rank]]
-        val_gen = BestTrackSequence(best_track_val_rank, best_track_scaler, config["best_track_inputs"], config["best_track_output"],
+    best_track_val_rank = best_track.loc[val_rank_indices[rank]]
+    val_gen = BestTrackSequence(best_track_val_rank, best_track_scaler, config["best_track_inputs"], config["best_track_output"],
                                   config["hwrf_variables"], config["batch_size"], config["hwrf_norm_data_path"])
-    else:
-        val_gen = None
     # initialize neural networks
     model_objs = dict()
     for model_name, model_config in config["models"].items():
@@ -61,7 +57,8 @@ def main():
             callbacks.extend([ModelCheckpoint(join(full_model_out_path, model_name + "_e_{epoch}.h5")),
                             CSVLogger(join(full_model_out_path, model_name + "_log.csv"))])
         model_objs[model_name].fit_generator(train_gen, build=True, validation_generator=val_gen,
-                                             max_queue_size=10, workers=1, use_multiprocessing=False, callbacks=callbacks)
+                                             max_queue_size=10, workers=1, use_multiprocessing=True,
+                                             callbacks=callbacks)
     return
 
 

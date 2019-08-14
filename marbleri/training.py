@@ -44,7 +44,7 @@ def partition_storm_examples(best_track_data, num_ranks, validation_proportion=0
 class BestTrackSequence(Sequence):
     def __init__(self, best_track_data, best_track_scaler, best_track_inputs, best_track_output,
                  hwrf_inputs, batch_size, hwrf_path,
-                 conv_only=False, shuffle=True, data_format="channels_first", domain_width=384):
+                 conv_only=True, shuffle=True, data_format="channels_first", domain_width=384):
         self.best_track_data = best_track_data.reset_index()
         self.best_track_scaler = best_track_scaler
         self.best_track_inputs = best_track_inputs

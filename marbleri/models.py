@@ -521,14 +521,13 @@ class StandardConvNet(object):
         return self.model.predict(x, y, batch_size=self.batch_size)
 
 
-class ResNet(StandardConvNet):
+class ResNet(BaseConvNet):
     """
     Extension of the :class:`marbleri.models.StandardConvNet` to include Residual layers instead of single convolutional layers.
     The residual layers split the data signal off, apply normalization and convolutions to it, then adds it back on to the original field.
     """
 
     def __init__(self, min_filters=16, filter_growth_rate=2, filter_width=5, min_data_width=4, pooling_width=2,
-                 scalar_hidden_layers=1, scaler_hidden_neurons=30,
                  hidden_activation="relu", output_type="linear",
                  pooling="mean", use_dropout=False, dropout_alpha=0.0,
                  data_format="channels_first", optimizer="adam", loss="mse", leaky_alpha=0.1, metrics=None,
@@ -536,7 +535,6 @@ class ResNet(StandardConvNet):
         super().__init__(min_filters=min_filters, filter_growth_rate=filter_growth_rate, filter_width=filter_width,
                          min_data_width=min_data_width, pooling_width=pooling_width,
                          hidden_activation=hidden_activation, data_format=data_format,
-                         scalar_hidden_layers=scalar_hidden_layers, scaler_hidden_neurons=scaler_hidden_neurons,
                          output_type=output_type, pooling=pooling, use_dropout=use_dropout,
                          dropout_alpha=dropout_alpha, optimizer=optimizer, loss=loss, metrics=metrics,
                          leaky_alpha=leaky_alpha,
@@ -573,9 +571,8 @@ class ResNet(StandardConvNet):
         out = Add()([y, x])
         return out
 
-    def build_network(self, scalar_input_shape, conv_input_shape, output_size):
+    def build_network(self, conv_input_shape, output_size):
         conv_input_layer = Input(shape=conv_input_shape, name="conv_input")
-        scalar_input_layer = Input(shape=(scalar_input_shape,), name="scalar_input")
         num_conv_layers = int(np.round((np.log(conv_input_shape[1]) - np.log(self.min_data_width))
                                        / np.log(self.pooling_width)))
         print(num_conv_layers)
@@ -589,15 +586,6 @@ class ResNet(StandardConvNet):
             else:
                 res_model = AveragePooling2D(data_format=self.data_format, name="pooling_{0:02d}".format(c))(res_model)
         res_model = Flatten(name="flatten")(res_model)
-        scalar_model = scalar_input_layer
-        for h in range(self.scalar_hidden_layers):
-            scalar_model = Dense(self.scalar_hidden_neurons, name=f"scalar_dense_{h:02d}")(scalar_model)
-            if self.hidden_activation == "leaky":
-                scalar_model = LeakyReLU(self.leaky_alpha, name=f"hidden_scalar_activation_{h:02d}")(scalar_model)
-            else:
-                scalar_model = Activation(self.hidden_activation, name=f"hidden_scalar_activation_{h:02d}")(
-                    scalar_model)
-        res_model = Concatenate()([scalar_model, res_model])
         if self.use_dropout:
             res_model = Dropout(self.dropout_alpha, name="dense_dropout")(res_model)
         if self.output_type == "linear":
@@ -608,4 +596,4 @@ class ResNet(StandardConvNet):
         elif "mixture" in self.output_type:
             num_mixtures = int(self.output_type.split("_")[1])
             res_model = GaussianMixtureOut(mixtures=num_mixtures)(res_model)
-        self.model = Model([scalar_input_layer, conv_input_layer], res_model)
+        self.model = Model(conv_input_layer, res_model)
