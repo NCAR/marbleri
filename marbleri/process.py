@@ -43,53 +43,16 @@ def process_all_hwrf_runs(hwrf_files, variable_levels, subset_indices, norm_valu
     return
 
 
-def process_hwrf_run_set(hwrf_files, variable_levels, subset_indices, out_path, out_file, norm_values, global_norm=False, save_interval=100):
-    #lock = Lock("hwrf_out")
-    #full_out_name = join(out_path, out_file)
-    #exit_code_sum = 0
-    #num_hwrf_files = len(hwrf_files)
-    #hwrf_arrays = []
-    #coord_vars = ["variable", "y", "x"]
+def process_hwrf_run_set(hwrf_files, variable_levels, subset_indices, out_path, out_file, norm_values,
+                         global_norm=False):
     for h, hwrf_file in enumerate(hwrf_files):
         process_hwrf_run(hwrf_file, variable_levels, subset_indices, out_path, out_file, norm_values,
                          global_norm=global_norm)
-        #hwrf_arrays.append(process_hwrf_run(hwrf_file, variable_levels, subset_indices, out_path, out_file, norm_values, global_norm=global_norm))
-        #if h % save_interval == 0 and h > 0:
-        #    print("Saving ", h, h * 100 / num_hwrf_files, hwrf_file)
-        #    ds = xr.merge(hwrf_arrays)
-        #    encoding = {}
-        #    for variable in list(ds.variables.keys()):
-        #        if variable not in coord_vars:
-        #            encoding[variable] = {"zlib": True, "complevel": 3}
-        #    #lock.acquire()
-        #    if not exists(full_out_name):
-        #        mode = "w"
-        #    else:
-        #        mode = "a"
-        #    ds.to_netcdf(full_out_name, mode=mode,
-        #                encoding=encoding)
-            #lock.release()
-        #    del ds
-        #    del hwrf_arrays[:]
-    #if len(hwrf_arrays) > 0:
-    #    ds = xr.merge(hwrf_arrays)
-    #    encoding = {}
-    #    for variable in list(ds.variables.keys()):
-    #        if variable not in coord_vars:
-    #            encoding[variable] = {"zlib": True, "complevel": 3}
-    #    lock.acquire()
-    #    if not exists(full_out_name):
-    #        mode = "w"
-    #    else:
-    #        mode = "a"
-    #    ds.to_netcdf(full_out_name, mode=mode,
-    #                encoding=encoding)
-    #    lock.release()
     return 0
 
 
 def process_hwrf_run(hwrf_filename, variable_levels, subset_indices,
-                     out_path, out_file, norm_values, global_norm=False):
+                     out_path, norm_values, global_norm=False):
     hwrf_data = HWRFStep(hwrf_filename)
     subset_start = subset_indices[0]
     subset_end = subset_indices[1]

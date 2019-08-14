@@ -3,6 +3,7 @@ from os.path import exists, join
 import pandas as pd
 import numpy as np
 import re
+from glob import glob
 
 
 class HWRFStep(object):
@@ -82,20 +83,30 @@ class HWRFStep(object):
 
 
 class BestTrackNetCDF(object):
+    """
+    Reads and processes the Best Track NetCDF files.
+
+    """
     def __init__(self,
-                 atl_filename="diag_2015_2017_adecks_atl_bug_corrected.nc",
-                 epo_filename="diag_2015_2017_adecks_epo_bug_corrected.nc",
-                 file_path="/glade/p/ral/nsap/rozoff/hfip/besttrack_predictors/"):
-        self.atl_filename = atl_filename
-        self.epo_filename = epo_filename
+                 file_path="/glade/p/ral/nsap/rozoff/hfip/besttrack_predictors/",
+                 file_start="diag_2015_2017"):
+        best_track_files = sorted(glob(join(file_path, file_start + "*.nc")))
+        if len(best_track_files) < 2:
+            raise FileNotFoundError("Matching best track files not found in " + file_path + "with start " + file_start)
+        self.atl_filename = best_track_files[0]
+        self.epo_filename = best_track_files[1]
         self.file_path = file_path
         self.bt_ds = dict()
         self.bt_ds["l"] = xr.open_dataset(join(self.file_path, self.atl_filename))
         self.bt_ds["e"] = xr.open_dataset(join(self.file_path, self.epo_filename))
         self.bt_runs = dict()
         self.run_columns = ["DATE", "STNAM", "STNUM", "BASIN"]
+        # Some of the variables have (time, nrun) as the dimensions, which causes problems when trying to use
+        # the xarray.to_dataframe() function. Changing the dimension from nrun to run fixes the problem.
         for basin in ["l", "e"]:
-            self.bt_ds[basin]["vmax_bt_newer"] = xr.DataArray(self.bt_ds[basin]["vmax_bt_new"], dims=("time", "run"))
+            for variable in self.bt_ds[basin].variables.keys():
+                if self.bt_ds[basin][variable].dims == ("time", "nrun"):
+                    self.bt_ds[basin][variable] = xr.DataArray(self.bt_ds[basin][variable], dims=("time", "run"))
         for basin in self.bt_ds.keys():
             self.bt_runs[basin] = self.bt_ds[basin][self.run_columns].to_dataframe()
             for col in self.bt_runs[basin].columns:
