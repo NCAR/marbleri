@@ -13,4 +13,4 @@ source /glade/work/dgagne/ncar_pylib_dl_10/bin/activate
 cd ~/marbleri/
 export OMP_NUM_THREADS=1
 python setup.py install
-python -u scripts/process_hwrf.py config/process_hwrf_casper.yml
+python -u scripts/process_hwrf.py config/process_hwrf_casper_dv.yml -s -n
