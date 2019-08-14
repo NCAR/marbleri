@@ -126,7 +126,7 @@ def calculate_hwrf_local_norms(hwrf_files, variable_levels, subset_indices, out_
     var_level_str = get_var_level_strings(variable_levels)
     df_columns = ["sum", "sum_count", "sum_squared_diff", "sum_squared_diff_count", "mean", "standard_dev"]
     local_stats = np.zeros((len(variable_levels), subset_size, subset_size, 6), dtype=np.float32)
-    split_points = list(range(0, len(hwrf_files), len(hwrf_files) // n_workers)) + [len(hwrf_files)]
+    split_points = list(range(0, len(hwrf_files), len(hwrf_files) // (n_workers - 1))) + [len(hwrf_files)]
     for s, split_point in enumerate(split_points[:-1]):
         hwrf_futures.append(dask_client.submit(hwrf_set_local_sums, hwrf_files[split_point:split_points[s+1]],
                                                variable_levels, subset_indices))
