@@ -8,13 +8,15 @@ import yaml
 from dask.distributed import LocalCluster, Client
 import os
 import numpy as np
-
+import logging
+import sys
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("config", help="Config filepath")
     parser.add_argument("-s", "--stat", action="store_true", help="Calculate mean and standard deviation for grids")
     parser.add_argument("-n", "--norm", action="store_true", help="Normalize gridded HWRF fields.")
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     args = parser.parse_args()
     if not exists(args.config):
         raise FileNotFoundError("Config file {0} not found.".format(args.config))
@@ -25,14 +27,15 @@ def main():
         os.makedirs(config["out_path"])
     best_track_variables = config["best_track_variables"]
     # load best track data
+    logging.info("Processing Best Track Data")
     bt_nc = BestTrackNetCDF(file_path=best_track_path)
     # convert best track data to data frame and filter out NaNs in HWRF and best track winds
-    bt_df = bt_nc.to_dataframe(best_track_variables, dropna=False)
-    for col in bt_df.columns[4:]:
-        print(col, np.count_nonzero(np.isnan(bt_df[col].values)))
+    #bt_df = bt_nc.to_dataframe(best_track_variables, dropna=False)
+    #for col in bt_df.columns[4:]:
+    #    print(col, np.count_nonzero(np.isnan(bt_df[col].values)))
     bt_df = bt_nc.to_dataframe(best_track_variables, dropna=True)
     
-    print("BT Shape", bt_df.shape)
+    logging.info(f"BT Shape {bt_df.shape[0]:d}")
     bt_df.to_csv(join(config["out_path"], "best_track_all.csv"), index_label="Index")
     if config["process_hwrf"] and (args.stat or args.norm): 
         # calculate derived variables in data frame
@@ -50,24 +53,21 @@ def main():
         for vl in hwrf_variable_levels:
             print(vl)
         hwrf_files = get_hwrf_filenames(bt_df, config["hwrf_path"])
-        print(config["n_workers"])
-        print(config["dask_worker"])
+        logging.info("Starting Dask Cluster")
         cluster = LocalCluster(n_workers=0, threads_per_worker=1)
         for i in range(config["n_workers"]):
             cluster.start_worker(**config["dask_worker"])
         client = Client(cluster)
-        print(client)
-        print(cluster)
         norm_values = None
         global_norm = False
         if args.stat:
             if config["normalize"] == "local":
-                print("local normalization")
+                logging.info("local normalization")
                 norm_values = calculate_hwrf_local_norms(hwrf_files, hwrf_variable_levels, subset_indices,
                                                      config["out_path"], client, config["n_workers"])
                 global_norm = False
             else:
-                print("global normalization")
+                logging.info("global normalization")
                 norm_values = calculate_hwrf_global_norms(hwrf_files, hwrf_variable_levels, config["out_path"], client)
                 global_norm = True
         if args.norm:
@@ -76,16 +76,13 @@ def main():
                 norm_values = norm_ds["local_norm_stats"].values
                 norm_ds.close()
             hwrf_out_path = join(config["out_path"], "hwrf_norm")
-            hwrf_out_file = config["out_file"]
-            print(hwrf_out_path)
-            print(hwrf_out_file)
             if not exists(hwrf_out_path):
                 os.makedirs(hwrf_out_path)
             # in parallel extract variables from each model run, subset center from rest of grid and save to other
             # netCDF files
-            print("process HWRF runs")
+            logging.info("process HWRF runs")
             process_all_hwrf_runs(hwrf_files, hwrf_variable_levels, subset_indices, norm_values, global_norm,
-                              hwrf_out_path, hwrf_out_file, config["n_workers"], client)
+                              hwrf_out_path, config["n_workers"], client)
         client.close()
         cluster.close()
 

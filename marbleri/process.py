@@ -2,8 +2,9 @@ import numpy as np
 import pandas as pd
 from .nwp import HWRFStep
 from os.path import join, exists
-from dask.distributed import as_completed, Lock
+from dask.distributed import as_completed
 import xarray as xr
+import logging
 
 
 def get_hwrf_filenames(best_track_df, hwrf_path, extension=".nc"):
@@ -31,28 +32,45 @@ def get_hwrf_filenames(best_track_df, hwrf_path, extension=".nc"):
 
 
 def process_all_hwrf_runs(hwrf_files, variable_levels, subset_indices, norm_values, global_norm, out_path,
-                          out_file, n_workers, dask_client):
+                          n_workers, dask_client):
     futures = []
     split_points = list(range(0, len(hwrf_files), len(hwrf_files) // (n_workers - 1))) + [len(hwrf_files)]
     for s, split_point in enumerate(split_points[:-1]):
         futures.append(dask_client.submit(process_hwrf_run_set, hwrf_files[split_point:split_points[s+1]],
                                                            variable_levels, subset_indices, out_path,
-                                                           out_file, norm_values, global_norm))
+                                                           norm_values, global_norm))
     dask_client.gather(futures)
     del futures[:]
     return
 
 
-def process_hwrf_run_set(hwrf_files, variable_levels, subset_indices, out_path, out_file, norm_values,
+def process_hwrf_run_set(hwrf_files, variable_levels, subset_indices, out_path, norm_values,
                          global_norm=False):
+    h_length = len(hwrf_files)
     for h, hwrf_file in enumerate(hwrf_files):
-        process_hwrf_run(hwrf_file, variable_levels, subset_indices, out_path, out_file, norm_values,
+        if h % 10 == 0:
+            logging.info(f"HWRF Subprocess {h/h_length * 100:0.1f}% Complete")
+        process_hwrf_run(hwrf_file, variable_levels, subset_indices, out_path, norm_values,
                          global_norm=global_norm)
     return 0
 
 
 def process_hwrf_run(hwrf_filename, variable_levels, subset_indices,
                      out_path, norm_values, global_norm=False):
+    """
+    Normalize the variables in a single HWRF file based on the norm_values and save another netCDF file.
+
+    Args:
+        hwrf_filename: HWRF file being normalized
+        variable_levels: List of tuples containing the variable and pressure level
+        subset_indices: grid index values marking the start and end indices of the domain being saved
+        out_path: Path where normalized netCDF files are saved
+        norm_values: if global norm, then pandas dataframe with means and sds. Otherwise is a data array with that info
+        global_norm: Whether a global or local norm is being used
+
+    Returns:
+
+    """
     hwrf_data = HWRFStep(hwrf_filename)
     subset_start = subset_indices[0]
     subset_end = subset_indices[1]
@@ -70,7 +88,6 @@ def process_hwrf_run(hwrf_filename, variable_levels, subset_indices,
         if np.count_nonzero(np.isnan(var_values)) > 0:
             var_norm_values[np.isnan(var_values)] = 0
         all_norm_values[v] = var_norm_values
-    #output_variable = hwrf_filename.split("/")[-1][:-3]
     ds = xr.DataArray(all_norm_values, dims=("variable", "y", "x"), coords={"variable": var_level_str,
                                                                                 "y": np.arange(subset_width),
                                                                                 "x": np.arange(subset_width),
@@ -111,7 +128,6 @@ def calculate_hwrf_local_norms(hwrf_files, variable_levels, subset_indices, out_
     local_stats = np.zeros((len(variable_levels), subset_size, subset_size, 6), dtype=np.float32)
     split_points = list(range(0, len(hwrf_files), len(hwrf_files) // n_workers)) + [len(hwrf_files)]
     for s, split_point in enumerate(split_points[:-1]):
-        print(split_point, split_points[s + 1])
         hwrf_futures.append(dask_client.submit(hwrf_set_local_sums, hwrf_files[split_point:split_points[s+1]],
                                                variable_levels, subset_indices))
     local_stats[:, :, :, 0:2] = np.sum(dask_client.gather(hwrf_futures), axis=0)
@@ -124,7 +140,6 @@ def calculate_hwrf_local_norms(hwrf_files, variable_levels, subset_indices, out_
     local_stat_data.to_netcdf(join(out_path, "hwrf_local_norm_stats.nc"),
                               encoding={"local_norm_stats": {"zlib": True, "complevel": 3}})
     for s, split_point in enumerate(split_points[:-1]):
-        print(split_point, split_points[s +1])
         hwrf_futures.append(dask_client.submit(hwrf_set_local_variances, hwrf_files[split_point:split_points[s+1]],
                                                variable_levels, local_mean, subset_indices))
     local_stats[:, :, :, 2:4] = np.sum(dask_client.gather(hwrf_futures), axis=0)
@@ -143,7 +158,7 @@ def hwrf_set_local_sums(hwrf_files, variable_levels, subset_indices):
     num_hwrf_files = len(hwrf_files)
     for h, hwrf_file in enumerate(hwrf_files):
         if h % 5 == 0:
-            print("Mean ", h, h * 100 / num_hwrf_files, hwrf_file)
+            logging.info(f"Mean {h * 100 / num_hwrf_files:0.2f}%, {hwrf_file}")
         sum_counts += hwrf_step_local_sums(hwrf_file, variable_levels, subset_indices)
     return sum_counts
 
@@ -154,8 +169,6 @@ def hwrf_step_local_sums(hwrf_filename, variable_levels, subset_indices):
     hwrf_data = HWRFStep(hwrf_filename)
     for v, var_level in enumerate(variable_levels):
         var_data = hwrf_data.get_variable(var_level[0], var_level[1], subset=subset_indices).values
-        if np.count_nonzero(var_data > 1e7) > 0:
-            print(hwrf_filename, var_level[0], var_level[1])
         var_data[var_data > 1e7] = np.nan
         sum_counts[v, :, :, 0] = np.where(~np.isnan(var_data), var_data, 0)
         sum_counts[v, :, :, 1] = np.where(~np.isnan(var_data), 1, 0)
@@ -169,7 +182,7 @@ def hwrf_set_local_variances(hwrf_files, variable_levels, variable_means, subset
     num_hwrf_files = len(hwrf_files)
     for h, hwrf_file in enumerate(hwrf_files):
         if h % 5 == 0:
-            print("Var ", h, h * 100/ num_hwrf_files, hwrf_file)
+            logging.info(f"Var {h * 100 / num_hwrf_files:0.2f}%, {hwrf_file}")
         sum_counts += hwrf_step_local_variances(hwrf_file, variable_levels, variable_means, subset_indices)
     return sum_counts 
 

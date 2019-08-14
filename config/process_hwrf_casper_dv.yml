@@ -13,7 +13,6 @@ hwrf_levels: [50000, 70000, 85000]
 subset_indices: [108, 492]
 hwrf_path: "/glade/p/ral/nsap/rozoff/hfip/reforecast_david/"
 out_path: "/glade/scratch/dgagne/hfip/processed_data_dv/"
-out_file: "hwrf_norm_out_20190814.nc"
 process_hwrf: 1
 normalize: "local"
 n_workers: 34
