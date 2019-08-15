@@ -46,7 +46,7 @@ class GaussianMixtureOut(Layer):
         return input_shape[0], self.mixtures * 3
 
 
-def crps_norm(y_true, y_pred, cdf_points=np.arange(0.0, 200.0, 5.0)):
+def crps_norm(y_true, y_pred, cdf_points=np.arange(-200, 200.0, 1.0)):
     cdf_points_tensor = K.tf.constant(0.5 * (cdf_points[:-1] + cdf_points[1:]), dtype="float32")
     cdf_point_diffs = K.tf.constant(cdf_points[1:] - cdf_points[:-1], dtype="float32")
     y_pred_cdf = tfd.Normal(loc=y_pred[:, 0:1], scale=y_pred[:, 1:2]).cdf(cdf_points_tensor)
