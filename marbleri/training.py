@@ -3,6 +3,8 @@ from keras.utils import Sequence
 from .nwp import HWRFStep
 from .process import get_hwrf_filenames
 import xarray as xr
+from os.path import exists
+import logging
 
 
 def partition_storm_examples(best_track_data, num_ranks, validation_proportion=0.2):
@@ -60,7 +62,10 @@ class BestTrackSequence(Sequence):
             self.conv_batch_shape = (self.batch_size, len(self.hwrf_inputs), self.domain_width, self.domain_width)
         else:
             self.conv_batch_shape = (self.batch_size, self.domain_width, self.domain_width, len(self.hwrf_inputs))
-        self.best_track_norm = self.best_track_scaler.transform(self.best_track_data[self.best_track_inputs]).astype(np.float32)
+        if len(self.best_track_inputs) > 0:
+            self.best_track_norm = self.best_track_scaler.transform(self.best_track_data[self.best_track_inputs]).astype(np.float32)
+        else:
+            self.best_track_norm = None
         self.indices = np.arange(self.best_track_data.shape[0])
         self.hwrf_file_names = get_hwrf_filenames(self.best_track_data, self.hwrf_path, ".nc")
         if self.data_format == "channels_first":
@@ -74,12 +79,15 @@ class BestTrackSequence(Sequence):
         for h, hwrf_file_name in enumerate(self.hwrf_file_names):
             if h % 100 == 0:
                 print(h * 100 / self.hwrf_file_names.size, hwrf_file_name)
-            hwrf_ds = xr.open_dataset(hwrf_file_name, decode_cf=False, decode_coords=False, decode_times=False)
-            if self.data_format == "channels_last":
-                self.conv_inputs[h] = hwrf_ds["hwrf_norm"].transpose("lat", "lon", "variable").values
+            if exists(hwrf_file_name):
+                hwrf_ds = xr.open_dataset(hwrf_file_name, decode_cf=False, decode_coords=False, decode_times=False)
+                if self.data_format == "channels_last":
+                    self.conv_inputs[h] = hwrf_ds["hwrf_norm"].transpose("lat", "lon", "variable").values
+                else:
+                    self.conv_inputs[h] = hwrf_ds["hwrf_norm"].values
+                hwrf_ds.close()
             else:
-                self.conv_inputs[h] = hwrf_ds["hwrf_norm"].values
-            hwrf_ds.close()
+                logging.info(hwrf_file_name + " does not exist")
         if self.shuffle:
             np.random.shuffle(self.indices)
 

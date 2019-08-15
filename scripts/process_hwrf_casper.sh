@@ -9,8 +9,9 @@
 #SBATCH --output=hwrf_proc.%j.out
 module purge
 module load gnu/7.3.0 openmpi/3.1.2 python/3.6.8 cuda/10.0
+module load netcdf
 source /glade/work/dgagne/ncar_pylib_dl_10/bin/activate
 cd ~/marbleri/
 export OMP_NUM_THREADS=1
 python setup.py install
-python -u scripts/process_hwrf.py config/process_hwrf_casper_dv.yml -s -n
+python -u scripts/process_hwrf.py config/process_hwrf_casper_dv.yml -n

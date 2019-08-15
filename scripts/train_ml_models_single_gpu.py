@@ -10,6 +10,7 @@ from marbleri.models import BaseConvNet, StandardConvNet, ResNet
 from keras.callbacks import ModelCheckpoint, CSVLogger
 import numpy as np
 from sklearn.preprocessing import StandardScaler
+import logging
 
 models = {"StandardConvNet": StandardConvNet,
           "BaseConvNet": BaseConvNet,
@@ -33,14 +34,20 @@ def main():
     # load best track data and netCDF data into memory
     rank = 0
     best_track = pd.read_csv(config["best_track_data_path"])
+    print("original best track count", best_track.shape[0])
+    out_col = config["best_track_output"]
+    best_track = best_track.loc[np.abs(best_track[out_col]) < 1000, :].reset_index()  
+    print("filtered best track count", best_track.shape[0])
     train_rank_indices, val_rank_indices = partition_storm_examples(best_track, 1,
                                                                         config["validation_proportion"])
     all_train_indices = np.concatenate(list(train_rank_indices.values()))
     best_track_train_rank = best_track.loc[train_rank_indices[rank]]
     best_track_scaler = None
+    logging.info("Load HWRF training data")
     train_gen = BestTrackSequence(best_track_train_rank, best_track_scaler, config["best_track_inputs"], config["best_track_output"],
                                   config["hwrf_variables"], config["batch_size"], config["hwrf_norm_data_path"])
     best_track_val_rank = best_track.loc[val_rank_indices[rank]]
+    logging.info("Load HWRF validation data")
     val_gen = BestTrackSequence(best_track_val_rank, best_track_scaler, config["best_track_inputs"], config["best_track_output"],
                                   config["hwrf_variables"], config["batch_size"], config["hwrf_norm_data_path"])
     # initialize neural networks
