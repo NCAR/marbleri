@@ -88,6 +88,10 @@ class BestTrackSequence(Sequence):
                 hwrf_ds.close()
             else:
                 logging.info(hwrf_file_name + " does not exist")
+        nan_points = np.count_nonzero(np.isnan(self.conv_inputs))
+        if nan_points > 0:
+            print(f"Number of nan points: {nan_points:d}") 
+            self.conv_inputs[np.isnan(self.conv_inputs)] = 0
         if self.shuffle:
             np.random.shuffle(self.indices)
 

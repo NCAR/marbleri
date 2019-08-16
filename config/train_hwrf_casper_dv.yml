@@ -8,21 +8,21 @@ best_track_inputs: []
 best_track_output: "dvmax_bt_24"
 random_seed: 242907
 validation_proportion: 0.1
-batch_size: 128
+batch_size: 256
 models:
   conv_small:
     model_type: "BaseConvNet"
     config:
       min_filters: 16
       pooling_width: 2
-      output_type: "gaussian"
-      loss: "crps_norm"
+      output_type: "linear"
+      loss: "mse"
       pooling: "max"
       data_format: "channels_first"
       l2_alpha: 0.0001
       optimizer: "adam"
-      batch_size: 128
-      epochs: 20
+      batch_size: 256
+      epochs: 10
       learning_rate: 0.0001
       verbose: 1
       distributed: 0
@@ -31,14 +31,14 @@ models:
       config:
         min_filters: 16
         pooling_width: 2
-        output_type: "gaussian"
-        loss: "crps_norm"
+        output_type: "linear"
+        loss: "mse"
         pooling: "max"
         data_format: "channels_first"
         l2_alpha: 0.0001
         optimizer: "adam"
-        batch_size: 128
-        epochs: 20
+        batch_size: 256
+        epochs: 10
         learning_rate: 0.0001
         verbose: 1
         distributed: 0
