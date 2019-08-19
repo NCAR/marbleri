@@ -62,4 +62,4 @@ def test_process_hwrf_run_set():
             os.remove(out_file)
     os.remove(out_path + "hwrf_local_norm_stats.nc")
     os.rmdir(out_path)
-    cluster.close()
+    client.close()
