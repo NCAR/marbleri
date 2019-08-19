@@ -33,10 +33,10 @@ def main():
     tf.random.set_random_seed(config["random_seed"])
     # load best track data and netCDF data into memory
     rank = 0
-    best_track = pd.read_csv(config["best_track_data_path"])
+    best_track = pd.read_csv(config["best_track_data_path"], index_col="Index")
     print("original best track count", best_track.shape[0])
     out_col = config["best_track_output"]
-    best_track = best_track.loc[np.abs(best_track[out_col]) < 1000, :].reset_index()  
+    best_track = best_track.loc[np.abs(best_track[out_col]) < 1000, :].reset_index(drop=True)
     print("filtered best track count", best_track.shape[0])
     train_rank_indices, val_rank_indices = partition_storm_examples(best_track, 1,
                                                                         config["validation_proportion"])

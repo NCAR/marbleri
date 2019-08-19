@@ -32,11 +32,11 @@ def partition_storm_examples(best_track_data, num_ranks, validation_proportion=0
     np.random.shuffle(train_indices)
     np.random.shuffle(val_indices)
     train_rank_indices = {}
-    val_rank_indices = {0: val_indices}
+    val_rank_indices = {0: np.sort(val_indices)}
     train_rank_size = train_indices.size // num_ranks
     val_rank_size = val_indices.size // num_ranks
     for i in range(num_ranks):
-        train_rank_indices[i] = train_indices[i * train_rank_size: (i + 1) * train_rank_size]
+        train_rank_indices[i] = np.sort(train_indices[i * train_rank_size: (i + 1) * train_rank_size])
         if i > 0:
             val_rank_indices[i] = None
     return train_rank_indices, val_rank_indices
@@ -50,7 +50,7 @@ class BestTrackSequence(Sequence):
     def __init__(self, best_track_data, best_track_scaler, best_track_inputs, best_track_output,
                  hwrf_inputs, batch_size, hwrf_path,
                  conv_only=True, shuffle=True, data_format="channels_first", domain_width=384):
-        self.best_track_data = best_track_data.reset_index()
+        self.best_track_data = best_track_data.reset_index(drop=True)
         self.best_track_scaler = best_track_scaler
         self.best_track_inputs = best_track_inputs
         self.best_track_output = best_track_output
@@ -92,9 +92,13 @@ class BestTrackSequence(Sequence):
             else:
                 logging.info(hwrf_file_name + " does not exist")
         nan_points = np.count_nonzero(~np.isfinite(self.conv_inputs))
+        big_points = np.count_nonzero(np.abs(self.conv_inputs) > 100)
         if nan_points > 0:
             print(f"Number of nan points: {nan_points:d}") 
             self.conv_inputs[~np.isfinite(self.conv_inputs)] = 0
+        if big_points > 0:
+            print(f"Number of overly big points: {big_points:d}")
+            self.conv_inputs[np.abs(self.conv_inputs) > 100] = 0
         if self.shuffle:
             np.random.shuffle(self.indices)
 
