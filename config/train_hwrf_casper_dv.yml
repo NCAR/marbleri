@@ -1,6 +1,6 @@
 hwrf_norm_data_path: "/glade/scratch/dgagne/hfip/processed_data_dv/hwrf_norm/"
 best_track_data_path: "/glade/scratch/dgagne/hfip/processed_data_dv/best_track_all.csv"
-model_out_path: "/glade/scratch/dgagne/hfip/hfip_models_dv/"
+model_out_path: "/glade/scratch/dgagne/hfip/hfip_models_dv_20190822/"
 hwrf_variables: ["THETA_E_L100_50000", "THETA_E_L100_70000", "THETA_E_L100_85000",
                  "U_RAD_L100_50000", "U_RAD_L100_70000", "U_RAD_L100_85000",
                  "V_TAN_L100_50000", "V_TAN_L100_70000", "V_TAN_L100_85000"]
@@ -25,6 +25,8 @@ models:
       epochs: 20
       learning_rate: 0.0001
       verbose: 1
+      use_dropout: 1
+      dropout_alpha: 0.1
       distributed: 0
   conv_res:
     model_type: "ResNet"

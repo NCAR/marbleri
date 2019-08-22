@@ -1,5 +1,5 @@
 from keras.layers import Dense, Conv2D, Activation, Input, Flatten, AveragePooling2D, MaxPool2D, LeakyReLU, Dropout, Add
-from keras.layers import BatchNormalization, Concatenate, Layer
+from keras.layers import BatchNormalization, Concatenate, Layer, SpatialDropout2D
 from keras.models import Model
 from keras.optimizers import Adam, SGD
 from keras.losses import mean_squared_error
@@ -233,6 +233,8 @@ class BaseConvNet(object):
                 scn_model = LeakyReLU(self.leaky_alpha, name="hidden_activation_{0:02d}".format(c))(scn_model)
             else:
                 scn_model = Activation(self.hidden_activation, name="hidden_activation_{0:02d}".format(c))(scn_model)
+            if self.use_dropout:
+                scn_model = SpatialDropout2D(rate=self.dropout_alpha)(scn_model)
             num_filters = int(num_filters * self.filter_growth_rate)
             if self.pooling.lower() == "max":
                 scn_model = MaxPool2D(pool_size=(self.pooling_width, self.pooling_width),
@@ -241,8 +243,7 @@ class BaseConvNet(object):
                 scn_model = AveragePooling2D(pool_size=(self.pooling_width, self.pooling_width),
                                              data_format=self.data_format, name="pooling_{0:02d}".format(c))(scn_model)
         scn_model = Flatten(name="flatten")(scn_model)
-        if self.use_dropout:
-            scn_model = Dropout(self.dropout_alpha, name="dense_dropout")(scn_model)
+
         if self.output_type == "linear":
             scn_model = Dense(output_size, name="dense_output")(scn_model)
             scn_model = Activation("linear", name="activation_output")(scn_model)
