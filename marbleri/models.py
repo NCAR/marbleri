@@ -532,7 +532,7 @@ class ResNet(BaseConvNet):
                  hidden_activation="relu", output_type="linear",
                  pooling="mean", use_dropout=False, dropout_alpha=0.0,
                  data_format="channels_first", optimizer="adam", loss="mse", leaky_alpha=0.1, metrics=None,
-                 learning_rate=0.001, batch_size=1024, epochs=10, l2_alpha=0, verbose=0):
+                 learning_rate=0.001, batch_size=1024, epochs=10, l2_alpha=0, verbose=0, distributed=False, **kwargs):
         super().__init__(min_filters=min_filters, filter_growth_rate=filter_growth_rate, filter_width=filter_width,
                          min_data_width=min_data_width, pooling_width=pooling_width,
                          hidden_activation=hidden_activation, data_format=data_format,
