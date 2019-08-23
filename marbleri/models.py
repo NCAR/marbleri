@@ -286,7 +286,7 @@ class BaseConvNet(object):
             output_size = 1
         else:
             output_size = y.shape[1]
-        return x[1].shape[1:], output_size
+        return x.shape[1:], output_size
 
     @staticmethod
     def get_generator_data_shapes(data_gen):
@@ -549,7 +549,7 @@ class ResNet(BaseConvNet):
             norm_axis = 1
         else:
             norm_axis = -1
-        if in_layer.shape[-1].value != filters:
+        if in_layer.shape[norm_axis].value != filters:
             x = Conv2D(filters, self.filter_width, data_format=self.data_format, padding="same")(in_layer)
         else:
             x = in_layer
@@ -573,6 +573,7 @@ class ResNet(BaseConvNet):
         return out
 
     def build_network(self, conv_input_shape, output_size):
+        print(conv_input_shape)
         conv_input_layer = Input(shape=conv_input_shape, name="conv_input")
         num_conv_layers = int(np.round((np.log(conv_input_shape[1]) - np.log(self.min_data_width))
                                        / np.log(self.pooling_width)))

@@ -39,3 +39,14 @@ def test_StandardConvNet():
     assert scn_norm.model.input[0].get_shape()[1] == scalar_input_shape
     assert scn_norm.model.input[1].get_shape()[1] == conv_input_shape[0]
     assert scn_norm.model.output.get_shape()[1] == 2
+
+
+def test_ResNet():
+    conv_input_shape = (9, 64, 64)
+    num_examples = 16
+    rn = ResNet(min_filters=4, filter_growth_rate=2, filter_width=3, epochs=2)
+    x_data = np.random.normal(size=[num_examples] + list(conv_input_shape))
+    y_data = np.random.normal(size=num_examples)
+    assert len(x_data.shape) == 4
+    rn.fit(x_data, y_data)
+    return
