@@ -4,6 +4,8 @@ from .process import get_hwrf_filenames
 import xarray as xr
 from os.path import exists
 import logging
+from multiprocessing import Pool
+from functools import partial
 
 
 def partition_storm_examples(best_track_data, num_ranks, validation_proportion=0.2):
@@ -42,6 +44,16 @@ def partition_storm_examples(best_track_data, num_ranks, validation_proportion=0
     return train_rank_indices, val_rank_indices
 
 
+def load_hwrf_norm_file(hwrf_file_name, data_format="channels_first"):
+    hwrf_ds = xr.open_dataset(hwrf_file_name, decode_cf=False,
+                              decode_coords=False, decode_times=False, autoclose=False)
+    if data_format == "channels_last":
+        conv_inputs = hwrf_ds["hwrf_norm"].transpose("lat", "lon", "variable").values
+    else:
+        conv_inputs = hwrf_ds["hwrf_norm"].values.astype(np.float32)
+    hwrf_ds.close()
+    return conv_inputs
+
 class BestTrackSequence(Sequence):
     """
     Generator for HWRF convolutional neural network training.
@@ -49,7 +61,8 @@ class BestTrackSequence(Sequence):
     """
     def __init__(self, best_track_data, best_track_scaler, best_track_inputs, best_track_output,
                  hwrf_inputs, batch_size, hwrf_path,
-                 conv_only=True, shuffle=True, data_format="channels_first", domain_width=384):
+                 conv_only=True, shuffle=True, data_format="channels_first", domain_width=384,
+                 load_workers=8):
         self.best_track_data = best_track_data.reset_index(drop=True)
         self.best_track_scaler = best_track_scaler
         self.best_track_inputs = best_track_inputs
@@ -61,6 +74,7 @@ class BestTrackSequence(Sequence):
         self.shuffle = shuffle
         self.domain_width = domain_width
         self.data_format = data_format
+        self.load_workers = load_workers
         if self.data_format == "channels_first":
             self.conv_batch_shape = (self.batch_size, len(self.hwrf_inputs), self.domain_width, self.domain_width)
         else:
@@ -71,26 +85,19 @@ class BestTrackSequence(Sequence):
             self.best_track_norm = None
         self.indices = np.arange(self.best_track_data.shape[0])
         self.hwrf_file_names = get_hwrf_filenames(self.best_track_data, self.hwrf_path, ".nc")
-        if self.data_format == "channels_first":
-            self.conv_inputs = np.zeros((self.hwrf_file_names.size, len(self.hwrf_inputs), self.domain_width,
-                                     self.domain_width),
-                                     dtype=np.float32)
-        else:
-            self.conv_inputs = np.zeros((self.hwrf_file_names.size, self.domain_width,
-                                     self.domain_width, len(self.hwrf_inputs)),
-                                     dtype=np.float32)
-        for h, hwrf_file_name in enumerate(self.hwrf_file_names):
-            if h % 100 == 0:
-                print(h * 100 / self.hwrf_file_names.size, hwrf_file_name)
-            if exists(hwrf_file_name):
-                hwrf_ds = xr.open_dataset(hwrf_file_name, decode_cf=False, decode_coords=False, decode_times=False)
-                if self.data_format == "channels_last":
-                    self.conv_inputs[h] = hwrf_ds["hwrf_norm"].transpose("lat", "lon", "variable").values
-                else:
-                    self.conv_inputs[h] = hwrf_ds["hwrf_norm"].values
-                hwrf_ds.close()
-            else:
-                logging.info(hwrf_file_name + " does not exist")
+        #if self.data_format == "channels_first":
+        #    self.conv_inputs = np.zeros((self.hwrf_file_names.size, len(self.hwrf_inputs), self.domain_width,
+        #                             self.domain_width),
+        #                             dtype=np.float32)
+        #else:
+        #    self.conv_inputs = np.zeros((self.hwrf_file_names.size, self.domain_width,
+        #                             self.domain_width, len(self.hwrf_inputs)),
+        #                             dtype=np.float32)
+        load_hwrf_norm_channels = partial(load_hwrf_norm_file, data_format=self.data_format)
+        pool = Pool(self.load_workers)
+        self.conv_inputs = np.stack(pool.map(load_hwrf_norm_channels, self.hwrf_file_names))
+        pool.close()
+        pool.join()
         nan_points = np.count_nonzero(~np.isfinite(self.conv_inputs))
         big_points = np.count_nonzero(np.abs(self.conv_inputs) > 100)
         if nan_points > 0:
