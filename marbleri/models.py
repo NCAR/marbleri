@@ -11,12 +11,12 @@ import keras.backend as K
 import tensorflow_probability as tfp
 tfd = tfp.distributions
 from horovod.keras import DistributedOptimizer
-
+import tensorflow as tf
 
 class NormOut(Layer):
     def __init__(self, **kwargs):
         self.mean_dense = Dense(1, **kwargs)
-        self.sd_dense = Dense(1, activation=K.tf.exp, **kwargs)
+        self.sd_dense = Dense(1, activation=K.exp, **kwargs)
         super(NormOut, self).__init__()
 
     def call(self, inputs, **kwargs):
@@ -32,7 +32,7 @@ class GaussianMixtureOut(Layer):
     def __init__(self, mixtures=2, **kwargs):
         self.mixtures = mixtures
         self.mean_dense = Dense(self.mixtures, activation="relu", **kwargs)
-        self.sd_dense = Dense(self.mixtures, activation=K.tf.exp, **kwargs)
+        self.sd_dense = Dense(self.mixtures, activation=K.exp, **kwargs)
         self.weight_dense = Dense(self.mixtures, activation="softmax", **kwargs)
         super(GaussianMixtureOut, self).__init__(**kwargs)
 
@@ -47,26 +47,26 @@ class GaussianMixtureOut(Layer):
 
 
 def crps_norm(y_true, y_pred, cdf_points=np.arange(-200, 200.0, 1.0)):
-    cdf_points_tensor = K.tf.constant(0.5 * (cdf_points[:-1] + cdf_points[1:]), dtype="float32")
-    cdf_point_diffs = K.tf.constant(cdf_points[1:] - cdf_points[:-1], dtype="float32")
+    cdf_points_tensor = K.constant(0.5 * (cdf_points[:-1] + cdf_points[1:]), dtype="float32")
+    cdf_point_diffs = K.constant(cdf_points[1:] - cdf_points[:-1], dtype="float32")
     y_pred_cdf = tfd.Normal(loc=y_pred[:, 0:1], scale=y_pred[:, 1:2]).cdf(cdf_points_tensor)
-    y_true_cdf = K.tf.cast(y_true <= cdf_points_tensor, "float32")
-    cdf_diffs = K.tf.reduce_mean((y_pred_cdf - y_true_cdf) ** 2 * cdf_point_diffs, axis=1)
-    return K.tf.reduce_mean(cdf_diffs)
+    y_true_cdf = K.cast(y_true <= cdf_points_tensor, "float32")
+    cdf_diffs = K.mean((y_pred_cdf - y_true_cdf) ** 2 * cdf_point_diffs, axis=1)
+    return K.mean(cdf_diffs)
 
 
 def crps_mixture(y_true, y_pred, cdf_points=np.arange(0, 200.0, 5.0)):
-    cdf_points_tensor = K.tf.constant(0.5 * (cdf_points[:-1] + cdf_points[1:]), dtype="float32")
-    cdf_point_diffs = K.tf.constant(cdf_points[1:] - cdf_points[:-1], dtype="float32")
+    cdf_points_tensor = K.constant(0.5 * (cdf_points[:-1] + cdf_points[1:]), dtype="float32")
+    cdf_point_diffs = K.constant(cdf_points[1:] - cdf_points[:-1], dtype="float32")
     num_mixtures = y_pred.shape[1] // 3
     weights = [y_pred[:, 2 * num_mixtures + i: 2 * num_mixtures + i + 1] for i in range(num_mixtures)]
     locs = [y_pred[:, i:i+1] for i in range(num_mixtures)]
     scales = [y_pred[:, num_mixtures + i: num_mixtures + i + 1] for i in range(num_mixtures)]
-    y_pred_cdf = K.tf.add_n([weights[i] * tfd.Normal(loc=locs[i], scale=scales[i]).cdf(cdf_points_tensor)
+    y_pred_cdf = tf.add_n([weights[i] * tfd.Normal(loc=locs[i], scale=scales[i]).cdf(cdf_points_tensor)
                              for i in range(num_mixtures)])
-    y_true_cdf = K.tf.cast(y_true <= cdf_points_tensor, "float32")
-    cdf_diffs = K.tf.reduce_mean((y_pred_cdf - y_true_cdf) ** 2 * cdf_point_diffs, axis=1)
-    return K.tf.reduce_mean(cdf_diffs)
+    y_true_cdf = K.cast(y_true <= cdf_points_tensor, "float32")
+    cdf_diffs = K.mean((y_pred_cdf - y_true_cdf) ** 2 * cdf_point_diffs, axis=1)
+    return K.mean(cdf_diffs)
 
 
 losses = {"mse": mean_squared_error,
