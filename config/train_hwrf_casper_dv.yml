@@ -21,7 +21,6 @@ models:
       hidden_activation: "leaky"
       output_type: "linear"
       loss: "mae"
-      metrics: ["mse"]
       pooling: "mean"
       data_format: "channels_first"
       optimizer: "adam"
@@ -40,7 +39,6 @@ models:
       output_type: "linear"
       hidden_activation: "leaky"
       loss: "mae"
-      metrics: ["mse"]
       pooling: "mean"
       data_format: "channels_first"
       l2_alpha: 0.001

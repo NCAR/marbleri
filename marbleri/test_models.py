@@ -46,7 +46,7 @@ def test_ResNet():
     num_examples = 16
     rn = ResNet(min_filters=16, filter_growth_rate=1.5, min_data_width=6, filter_width=3, epochs=1,
                 hidden_activation="leaky", data_format="channels_first", pooling_width=2,
-                output_type='linear', loss="mse", pooling="max", learning_rate=0.0001, verbose=1)
+                output_type='linear', loss="mae", pooling="max", learning_rate=0.0001, verbose=1)
     x_data = np.random.normal(size=[num_examples] + list(conv_input_shape))
     y_data = np.random.normal(size=num_examples)
     assert len(x_data.shape) == 4
