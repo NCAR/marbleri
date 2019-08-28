@@ -51,6 +51,7 @@ def load_hwrf_norm_file(hwrf_file_name, data_format="channels_first"):
         conv_inputs = hwrf_ds["hwrf_norm"].transpose("lat", "lon", "variable").values
     else:
         conv_inputs = hwrf_ds["hwrf_norm"].values.astype(np.float32)
+    conv_inputs[conv_inputs > 200] = 0
     hwrf_ds.close()
     return conv_inputs
 
@@ -62,7 +63,7 @@ class BestTrackSequence(Sequence):
     def __init__(self, best_track_data, best_track_scaler, best_track_inputs, best_track_output,
                  hwrf_inputs, batch_size, hwrf_path,
                  conv_only=True, shuffle=True, data_format="channels_first", domain_width=384,
-                 load_workers=8):
+                 load_workers=24):
         self.best_track_data = best_track_data.reset_index(drop=True)
         self.best_track_scaler = best_track_scaler
         self.best_track_inputs = best_track_inputs
@@ -95,9 +96,11 @@ class BestTrackSequence(Sequence):
         #                             dtype=np.float32)
         load_hwrf_norm_channels = partial(load_hwrf_norm_file, data_format=self.data_format)
         pool = Pool(self.load_workers)
-        self.conv_inputs = np.stack(pool.map(load_hwrf_norm_channels, self.hwrf_file_names))
+        self.conv_inputs = np.stack(pool.map(load_hwrf_norm_channels, self.hwrf_file_names, 128))
         pool.close()
         pool.join()
+        print("conv input shape", self.conv_inputs.shape)
+        print("conv input dtype", self.conv_inputs.dtype)
         nan_points = np.count_nonzero(~np.isfinite(self.conv_inputs))
         big_points = np.count_nonzero(np.abs(self.conv_inputs) > 100)
         if nan_points > 0:

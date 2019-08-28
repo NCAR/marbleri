@@ -1,5 +1,5 @@
-hwrf_norm_data_path: "/glade/scratch/dgagne/hfip/processed_data_dv/hwrf_norm/"
-best_track_data_path: "/glade/scratch/dgagne/hfip/processed_data_dv/best_track_all.csv"
+hwrf_norm_data_path: "/glade/scratch/dgagne/hfip/processed_data_dv_lossy/hwrf_norm/"
+best_track_data_path: "/glade/scratch/dgagne/hfip/processed_data_dv_lossy/best_track_all.csv"
 model_out_path: "/glade/scratch/dgagne/hfip/hfip_models_dv_20190824/"
 hwrf_variables: ["THETA_E_L100_50000", "THETA_E_L100_70000", "THETA_E_L100_85000",
                  "U_RAD_L100_50000", "U_RAD_L100_70000", "U_RAD_L100_85000",
@@ -13,26 +13,26 @@ models:
   conv_res:
     model_type: "ResNet"
     config:
-      min_filters: 16
-      min_data_width: 6
+      min_filters: 12
+      min_data_width: 12
       filter_width: 3
       filter_growth_rate: 1.5
       pooling_width: 2
       hidden_activation: "leaky"
       output_type: "linear"
       loss: "mse"
-      pooling: "max"
+      pooling: "mean"
       data_format: "channels_first"
       optimizer: "adam"
-      batch_size: 256
+      batch_size: 64
       epochs: 15
       learning_rate: 0.0001
       verbose: 1
   conv_small:
     model_type: "BaseConvNet"
     config:
-      min_filters: 16
-      min_data_width: 6
+      min_filters: 12
+      min_data_width: 12
       filter_width: 3
       filter_growth_rate: 1.5
       pooling_width: 2
@@ -43,7 +43,7 @@ models:
       data_format: "channels_first"
       l2_alpha: 0.001
       optimizer: "adam"
-      batch_size: 256
+      batch_size: 64
       epochs: 15
       learning_rate: 0.0001
       verbose: 1

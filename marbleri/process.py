@@ -95,7 +95,9 @@ def process_hwrf_run(hwrf_filename, variable_levels, subset_indices,
                                                                                 "lat": lat},
                       name="hwrf_norm")
     ds.to_netcdf(join(out_path, hwrf_filename.split("/")[-1]),
-                 encoding={"hwrf_norm": {"zlib": True, "complevel": 3}}
+                 encoding={"hwrf_norm": {"zlib": True, "complevel": 1, "least_significant_digit": 3},
+                           "lon": {"zlib": True, "complevel": 1, "least_significant_digit": 3},
+                           "lat": {"zlib": True, "complevel": 1, "least_significant_digit": 3}}
                  )
     return ds
 
