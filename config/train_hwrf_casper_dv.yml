@@ -1,53 +1,55 @@
 hwrf_norm_data_path: "/glade/scratch/dgagne/hfip/processed_data_dv_lossy/hwrf_norm/"
 best_track_data_path: "/glade/scratch/dgagne/hfip/processed_data_dv_lossy/best_track_all.csv"
-model_out_path: "/glade/scratch/dgagne/hfip/hfip_models_dv_20190824/"
+model_out_path: "/glade/scratch/dgagne/hfip/hfip_models_dv_20190828/"
 hwrf_variables: ["THETA_E_L100_50000", "THETA_E_L100_70000", "THETA_E_L100_85000",
                  "U_RAD_L100_50000", "U_RAD_L100_70000", "U_RAD_L100_85000",
                  "V_TAN_L100_50000", "V_TAN_L100_70000", "V_TAN_L100_85000"]
 best_track_inputs: []
 best_track_output: "dvmax_bt_24"
 random_seed: 242907
-validation_proportion: 0.1
+validation_proportion: 0.2
 batch_size: 256
 models:
   conv_res:
     model_type: "ResNet"
     config:
-      min_filters: 12
+      min_filters: 16
       min_data_width: 12
       filter_width: 3
       filter_growth_rate: 1.5
       pooling_width: 2
       hidden_activation: "leaky"
       output_type: "linear"
-      loss: "mse"
+      loss: "mae"
+      metrics: ["mse"]
       pooling: "mean"
       data_format: "channels_first"
       optimizer: "adam"
       batch_size: 64
-      epochs: 15
-      learning_rate: 0.0001
+      epochs: 20
+      learning_rate: 0.001
       verbose: 1
   conv_small:
     model_type: "BaseConvNet"
     config:
-      min_filters: 12
+      min_filters: 16
       min_data_width: 12
       filter_width: 3
       filter_growth_rate: 1.5
       pooling_width: 2
       output_type: "linear"
       hidden_activation: "leaky"
-      loss: "mse"
+      loss: "mae"
+      metrics: ["mse"]
       pooling: "mean"
       data_format: "channels_first"
       l2_alpha: 0.001
       optimizer: "adam"
       batch_size: 64
-      epochs: 15
-      learning_rate: 0.0001
+      epochs: 20
+      learning_rate: 0.001
       verbose: 1
       use_dropout: 1
-      dropout_alpha: 0.2
+      dropout_alpha: 0.3
       distributed: 0
 

@@ -2,7 +2,7 @@ from keras.layers import Dense, Conv2D, Activation, Input, Flatten, AveragePooli
 from keras.layers import BatchNormalization, Concatenate, Layer, SpatialDropout2D
 from keras.models import Model
 from keras.optimizers import Adam, SGD
-from keras.losses import mean_squared_error
+from keras.losses import mean_squared_error, mean_absolute_error
 from keras.utils import multi_gpu_model
 from keras.regularizers import l2
 from functools import partial
@@ -70,6 +70,7 @@ def crps_mixture(y_true, y_pred, cdf_points=np.arange(0, 200.0, 5.0)):
 
 
 losses = {"mse": mean_squared_error,
+          "mae": mean_absolute_error,
           "crps_norm": crps_norm,
           "crps_mixture": crps_mixture}
 
