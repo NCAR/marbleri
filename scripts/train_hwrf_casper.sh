@@ -7,7 +7,6 @@
 #SBATCH --partition=dav
 #SBATCH --gres=gpu:v100:1
 #SBATCH --mem=1000G
-#SBATCH --reservation=casper_8xV100
 #SBATCH --output=hwrf_train.%j.out
 module purge
 module load gnu/7.3.0 python/3.6.8 openmpi/3.1.2 cuda/10.0
