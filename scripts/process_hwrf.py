@@ -24,8 +24,9 @@ def main():
     with open(args.config, "rb") as config_file:
         config = yaml.load(config_file, yaml.Loader)
     best_track_path = config["best_track_path"]
-    if not exists(config["out_path"]):
-        os.makedirs(config["out_path"])
+    out_path = config["out_path"]
+    if not exists(out_path):
+        os.makedirs(out_path)
     best_track_variables = config["best_track_variables"]
     # load best track data
     logging.info("Processing Best Track Data")
@@ -37,8 +38,8 @@ def main():
     bt_df = bt_nc.to_dataframe(best_track_variables, dropna=True)
     
     logging.info(f"BT Shape {bt_df.shape[0]:d}")
-    bt_df.to_csv(join(config["out_path"], "best_track_all.csv"), index_label="Index")
-    if config["process_hwrf"] and (args.stat or args.norm): 
+    bt_df.to_csv(join(out_path, "best_track_all.csv"), index_label="Index")
+    if config["process_hwrf"] and (args.coarse or args.stat or args.norm): 
         # calculate derived variables in data frame
         hwrf_variables = config["hwrf_variables"]
         hwrf_levels = config["hwrf_levels"]
@@ -63,23 +64,23 @@ def main():
         global_norm = False
         if args.coarse:
             coarsen_hwrf_runs(hwrf_files, hwrf_variable_levels, config["window_size"],
-                              subset_indices, config["out_path"], client)
+                              subset_indices, out_path, client)
         if args.stat:
             if config["normalize"] == "local":
                 logging.info("local normalization")
                 norm_values = calculate_hwrf_local_norms(hwrf_files, hwrf_variable_levels, subset_indices,
-                                                     config["out_path"], client, config["n_workers"])
+                                                         out_path, client, config["n_workers"])
                 global_norm = False
             else:
                 logging.info("global normalization")
-                norm_values = calculate_hwrf_global_norms(hwrf_files, hwrf_variable_levels, config["out_path"], client)
+                norm_values = calculate_hwrf_global_norms(hwrf_files, hwrf_variable_levels, out_path, client)
                 global_norm = True
         if args.norm:
             if norm_values is None:
-                norm_ds = xr.open_dataset(join(config["out_path"], "hwrf_local_norm_stats.nc"))
+                norm_ds = xr.open_dataset(join(out_path, "hwrf_local_norm_stats.nc"))
                 norm_values = norm_ds["local_norm_stats"].values
                 norm_ds.close()
-            hwrf_out_path = join(config["out_path"], "hwrf_norm")
+            hwrf_out_path = join(out_path, "hwrf_norm")
             if not exists(hwrf_out_path):
                 os.makedirs(hwrf_out_path)
             # in parallel extract variables from each model run, subset center from rest of grid and save to other

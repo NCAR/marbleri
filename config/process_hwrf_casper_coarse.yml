@@ -14,9 +14,10 @@ hwrf_levels: [20000, 50000, 70000, 85000]
 subset_indices: [44, 556]
 hwrf_path: "/glade/p/ral/nsap/rozoff/hfip/reforecast_centered_at_surface/"
 out_path: "/glade/scratch/dgagne/hfip/processed_data_dv_lossy/"
+window_size: 8
 process_hwrf: 1
 normalize: "local"
-n_workers: 34
+n_workers: 8
 dask_worker:
     ncores: 1
     local_dir: "/glade/scratch/dgagne/dask-worker-space/"

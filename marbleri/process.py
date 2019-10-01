@@ -139,14 +139,14 @@ def coarsen_hwrf_runs(hwrf_files, variable_levels, window_size, subset_indices, 
     """
     futures = []
     sorted_hwrf_files = pd.Series(sorted(hwrf_files))
-    hwrf_run_names = sorted_hwrf_files.str.split("/").str[-1].str.split(".").str[:-2].join("_")
-    hwrf_run_unique_names = hwrf_run_names.unique()
+    hwrf_run_names = sorted_hwrf_files.str.split("/").str[-1].str.split(".").str[:-2].str.join("_")
+    hwrf_run_unique_names = np.unique(hwrf_run_names.values)
     coarse_out_path = join(out_path, f"hwrf_coarse_{window_size:02d}")
     if not exists(coarse_out_path):
         os.makedirs(coarse_out_path)
     for hwrf_run_unique_name in hwrf_run_unique_names:
-        hwrf_run_indices = np.where(hwrf_run_unique_names == hwrf_run_unique_name)[0]
-        futures.append(dask_client.submit(coarsen_hwrf_run_set, hwrf_files[hwrf_run_indices],
+        hwrf_run_indices = np.where(hwrf_run_names == hwrf_run_unique_name)[0]
+        futures.append(dask_client.submit(coarsen_hwrf_run_set, sorted_hwrf_files.values[hwrf_run_indices],
                                                            variable_levels, window_size, subset_indices, coarse_out_path))
     dask_client.gather(futures)
     del futures[:]
@@ -183,7 +183,6 @@ def coarsen_hwrf_run_set(hwrf_files, variable_levels, window_size, subset_indice
     for file_attr in hwrf_file_coords_keys:
         hwrf_file_coords[file_attr] = []
     for h, hwrf_file in enumerate(hwrf_files):
-        print(hwrf_file)
         hwrf_data = HWRFStep(hwrf_file)
         lon = hwrf_data.ds["lon_0"][slice(subset_start, subset_end)].values
         lat = hwrf_data.ds["lat_0"][slice(subset_end, subset_start, -1)].values
@@ -192,15 +191,15 @@ def coarsen_hwrf_run_set(hwrf_files, variable_levels, window_size, subset_indice
         for file_attr in hwrf_file_coords_keys:
             hwrf_file_coords[file_attr].append(getattr(hwrf_data, file_attr))
         for v, var_level in enumerate(variable_levels):
-            print(var_level)
             hwrf_variable = hwrf_data.get_variable(*var_level, subset=subset_indices)
             hwrf_var_attrs[var_level_strs[v]] = hwrf_variable.attrs
-            print(hwrf_variable.values.shape)
             var_values = hwrf_variable.values
             if np.any(var_values.ravel() > 1e7):
                 var_values[var_values > 1e7] = np.median(var_values)
             all_coarse_values[var_level_strs[v]][h] = coarsen_array(var_values,
                                                                     window_size=window_size, pool=pool)
+        hwrf_data.close()
+        del hwrf_data
     hwrf_file_coords["storm_ids"] = storm_ids
     all_coarse_da = {}
     var_coords = {"storm": np.arange(len(hwrf_files)),
@@ -212,18 +211,21 @@ def coarsen_hwrf_run_set(hwrf_files, variable_levels, window_size, subset_indice
                                                coords=var_coords,
                                                attrs=hwrf_var_attrs[var_name],
                                                name=var_name)
-        nc_encoding[var_name] = {"zlib": True, "complevel": 2, "least_significant_digit": 2}
+        nc_encoding[var_name] = {"zlib": True, "complevel": 2, "least_significant_digit": 4}
     for coord_name, coord in hwrf_file_coords.items():
         hwrf_file_coords[coord_name] = np.array(coord)
     coarse_hwrf_ds = xr.Dataset(all_coarse_da, coords=hwrf_file_coords)
-    coarse_hwrf_ds.to_netcdf(join(out_path, hwrf_files[0].split("/")[-1][:-8] + ".nc"),
+    out_file = join(out_path, hwrf_files[0].split("/")[-1][:-8] + ".nc")
+    print(out_file)
+    coarse_hwrf_ds.to_netcdf(out_file,
                              encoding=nc_encoding, mode="w")
+    coarse_hwrf_ds.close()
+    del coarse_hwrf_ds
     return
 
 
 def coarsen_array(data, window_size=2, pool="mean"):
     window_steps = np.arange(window_size)
-    print(data.shape[0] // window_size)
     if len(data.shape) == 2:
         all_coarse_data = np.zeros((data.shape[0] // window_size,
                                     data.shape[1] // window_size, window_size ** 2),

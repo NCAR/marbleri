@@ -110,7 +110,7 @@ class BestTrackNetCDF(object):
         for basin in self.bt_ds.keys():
             self.bt_runs[basin] = self.bt_ds[basin][self.run_columns].to_dataframe()
             for col in self.bt_runs[basin].columns:
-                self.bt_runs[basin][col] = self.bt_runs[basin][col].str.strip().str.decode("utf-8")
+                self.bt_runs[basin][col] = self.bt_runs[basin][col].str.decode("utf-8").str.strip()
 
     def get_storm_variables(self, variables, run_date, storm_name, storm_number, basin, forecast_hour):
         b_runs = self.bt_runs[basin]
