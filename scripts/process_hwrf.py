@@ -1,6 +1,6 @@
 from marbleri.nwp import BestTrackNetCDF
 from marbleri.process import calculate_hwrf_global_norms, calculate_hwrf_local_norms
-from marbleri.process import process_all_hwrf_runs, get_hwrf_filenames
+from marbleri.process import process_all_hwrf_runs, get_hwrf_filenames, coarsen_hwrf_runs
 import argparse
 from os.path import join, exists
 import xarray as xr
@@ -14,6 +14,7 @@ import sys
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("config", help="Config filepath")
+    parser.add_argument("-c", "--coarse", action="store_true", help="Coarsen HWRF fields.")
     parser.add_argument("-s", "--stat", action="store_true", help="Calculate mean and standard deviation for grids")
     parser.add_argument("-n", "--norm", action="store_true", help="Normalize gridded HWRF fields.")
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
@@ -60,6 +61,9 @@ def main():
         client = Client(cluster)
         norm_values = None
         global_norm = False
+        if args.coarse:
+            coarsen_hwrf_runs(hwrf_files, hwrf_variable_levels, config["window_size"],
+                              subset_indices, config["out_path"], client)
         if args.stat:
             if config["normalize"] == "local":
                 logging.info("local normalization")

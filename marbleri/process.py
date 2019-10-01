@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from .nwp import HWRFStep
 from os.path import join, exists
+import os
 from dask.distributed import as_completed
 import xarray as xr
 import logging
@@ -16,7 +17,7 @@ def get_hwrf_filenames(best_track_df, hwrf_path, extension=".nc"):
         hwrf_path: Path to HWRF files
         extension: type of file containing hwrf data.
     Returns:
-
+        Array of HWRF filenames matching each row in the best track dataframe
     """
     hwrf_filenames = []
     for i in range(best_track_df.shape[0]):
@@ -33,6 +34,23 @@ def get_hwrf_filenames(best_track_df, hwrf_path, extension=".nc"):
 
 def process_all_hwrf_runs(hwrf_files, variable_levels, subset_indices, norm_values, global_norm, out_path,
                           n_workers, dask_client):
+    """
+    Load each HWRF file in parallel, extract select variables, and normalize them based on the normalizing values
+    already calculated.
+
+    Args:
+        hwrf_files:
+        variable_levels:
+        subset_indices:
+        norm_values:
+        global_norm:
+        out_path:
+        n_workers:
+        dask_client:
+
+    Returns:
+
+    """
     futures = []
     split_points = list(range(0, len(hwrf_files), len(hwrf_files) // (n_workers - 1))) + [len(hwrf_files)]
     for s, split_point in enumerate(split_points[:-1]):
@@ -100,6 +118,139 @@ def process_hwrf_run(hwrf_filename, variable_levels, subset_indices,
                            "lat": {"zlib": True, "complevel": 1, "least_significant_digit": 3}}
                  )
     return ds
+
+
+def coarsen_hwrf_runs(hwrf_files, variable_levels, window_size, subset_indices, out_path,
+                      dask_client):
+    """
+    Aggregate HWRF data spatially to produce lower resolution fields.
+
+    Args:
+        hwrf_files: list of HWRF netCDF files
+        variable_levels: Tuples of variable and pressure level or None if surface.
+        window_size: size of pooling window (usually a power of 2)
+        subset_indices: beginning and ending indices of domain
+        out_path: path to output coarse files. An additional directory is created
+            for files of a certain window size.
+        dask_client: Dask Client object.
+
+    Returns:
+
+    """
+    futures = []
+    sorted_hwrf_files = pd.Series(sorted(hwrf_files))
+    hwrf_run_names = sorted_hwrf_files.str.split("/").str[-1].str.split(".").str[:-2].join("_")
+    hwrf_run_unique_names = hwrf_run_names.unique()
+    coarse_out_path = join(out_path, f"hwrf_coarse_{window_size:02d}")
+    if not exists(coarse_out_path):
+        os.makedirs(coarse_out_path)
+    for hwrf_run_unique_name in hwrf_run_unique_names:
+        hwrf_run_indices = np.where(hwrf_run_unique_names == hwrf_run_unique_name)[0]
+        futures.append(dask_client.submit(coarsen_hwrf_run_set, hwrf_files[hwrf_run_indices],
+                                                           variable_levels, window_size, subset_indices, coarse_out_path))
+    dask_client.gather(futures)
+    del futures[:]
+
+
+def coarsen_hwrf_run_set(hwrf_files, variable_levels, window_size, subset_indices, out_path, pool="mean"):
+    """
+    This function coarse-grains a set of HWRF files and outputs them as a single larger netCDF file.
+
+    Args:
+        hwrf_files: List of hwrf filenames that are being combined into one netCDF file
+        variable_levels: List of pairs of variable and pressure levels
+        window_size (int): Size of pooling window. Recommend something divisible by 2.
+        subset_indices: Tuple of beginning and ending indices for subsetting original hwrf data.
+        out_path: Path to output file.
+        pool: Whether to use mean, max, median, or min pooling
+
+    """
+    subset_start = subset_indices[0]
+    subset_end = subset_indices[1]
+    subset_width = subset_end - subset_start
+    coarse_width = subset_width // window_size
+    var_level_strs = get_var_level_strings(variable_levels)
+    all_coarse_values = {}
+    for var_level_str in var_level_strs:
+        all_coarse_values[var_level_str] = np.zeros((len(hwrf_files), coarse_width, coarse_width),
+                                                                 dtype=np.float32)
+    all_coarse_lons = np.zeros((len(hwrf_files), coarse_width), dtype=np.float32)
+    all_coarse_lats = np.zeros((len(hwrf_files), coarse_width), dtype=np.float32)
+    hwrf_var_attrs = dict()
+    hwrf_file_coords = dict()
+    storm_ids = [hwrf_file.split("/")[-1][:-3] for hwrf_file in hwrf_files]
+    hwrf_file_coords_keys = ["storm_name", "storm_number", "basin", "run_date", "forecast_hour"]
+    for file_attr in hwrf_file_coords_keys:
+        hwrf_file_coords[file_attr] = []
+    for h, hwrf_file in enumerate(hwrf_files):
+        print(hwrf_file)
+        hwrf_data = HWRFStep(hwrf_file)
+        lon = hwrf_data.ds["lon_0"][slice(subset_start, subset_end)].values
+        lat = hwrf_data.ds["lat_0"][slice(subset_end, subset_start, -1)].values
+        all_coarse_lons[h] = coarsen_array(lon, window_size=window_size, pool=pool)
+        all_coarse_lats[h] = coarsen_array(lat, window_size=window_size, pool=pool)
+        for file_attr in hwrf_file_coords_keys:
+            hwrf_file_coords[file_attr].append(getattr(hwrf_data, file_attr))
+        for v, var_level in enumerate(variable_levels):
+            print(var_level)
+            hwrf_variable = hwrf_data.get_variable(*var_level, subset=subset_indices)
+            hwrf_var_attrs[var_level_strs[v]] = hwrf_variable.attrs
+            print(hwrf_variable.values.shape)
+            var_values = hwrf_variable.values
+            if np.any(var_values.ravel() > 1e7):
+                var_values[var_values > 1e7] = np.median(var_values)
+            all_coarse_values[var_level_strs[v]][h] = coarsen_array(var_values,
+                                                                    window_size=window_size, pool=pool)
+    hwrf_file_coords["storm_ids"] = storm_ids
+    all_coarse_da = {}
+    var_coords = {"storm": np.arange(len(hwrf_files)),
+                  "y": np.arange(coarse_width),
+                  "x": np.arange(coarse_width)}
+    nc_encoding = {}
+    for var_name, coarse_array in all_coarse_values.items():
+        all_coarse_da[var_name] = xr.DataArray(coarse_array, dims=("storm", "y", "x"),
+                                               coords=var_coords,
+                                               attrs=hwrf_var_attrs[var_name],
+                                               name=var_name)
+        nc_encoding[var_name] = {"zlib": True, "complevel": 2, "least_significant_digit": 2}
+    for coord_name, coord in hwrf_file_coords.items():
+        hwrf_file_coords[coord_name] = np.array(coord)
+    coarse_hwrf_ds = xr.Dataset(all_coarse_da, coords=hwrf_file_coords)
+    coarse_hwrf_ds.to_netcdf(join(out_path, hwrf_files[0].split("/")[-1][:-8] + ".nc"),
+                             encoding=nc_encoding, mode="w")
+    return
+
+
+def coarsen_array(data, window_size=2, pool="mean"):
+    window_steps = np.arange(window_size)
+    print(data.shape[0] // window_size)
+    if len(data.shape) == 2:
+        all_coarse_data = np.zeros((data.shape[0] // window_size,
+                                    data.shape[1] // window_size, window_size ** 2),
+                                   dtype=data.dtype)
+        step = 0
+        for i in window_steps:
+            for j in window_steps:
+                all_coarse_data[:, :, step] = data[i::window_size, j::window_size]
+                step += 1
+    else:
+        all_coarse_data = np.zeros((data.shape[0] // window_size, window_size),
+                                   dtype=data.dtype)
+        step = 0
+        for i in window_steps:
+            all_coarse_data[:, step] = data[i::window_size]
+            step += 1
+    if pool == "mean":
+        coarse_data = all_coarse_data.mean(axis=-1)
+    elif pool == "max":
+        coarse_data = all_coarse_data.max(axis=-1)
+    elif pool == "min":
+        coarse_data = all_coarse_data.min(axis=-1)
+    elif pool == "median":
+        coarse_data = np.median(all_coarse_data, axis=-1)
+    else:
+        coarse_data = all_coarse_data.mean(axis=-1)
+    return coarse_data
 
 
 def get_var_level_strings(variable_levels):
@@ -255,3 +406,6 @@ def hwrf_step_global_variances(hwrf_filename, variable_levels, variable_means):
         sum_counts[v, 1] = np.count_nonzero(~np.isnan(hwrf_data.get_variable(var_level[0], var_level[1])))
     hwrf_data.close()
     return sum_counts
+
+
+
