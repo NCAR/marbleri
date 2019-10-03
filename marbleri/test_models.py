@@ -1,5 +1,5 @@
 from .models import StandardConvNet, crps_norm, crps_mixture, ResNet, NormOut, GaussianMixtureOut
-import keras.backend as K
+import tensorflow.keras.backend as K
 import numpy as np
 
 
@@ -42,10 +42,10 @@ def test_StandardConvNet():
 
 
 def test_ResNet():
-    conv_input_shape = (9, 48, 48)
+    conv_input_shape = (48, 48, 9)
     num_examples = 16
     rn = ResNet(min_filters=16, filter_growth_rate=1.5, min_data_width=6, filter_width=3, epochs=1,
-                hidden_activation="leaky", data_format="channels_first", pooling_width=2,
+                hidden_activation="leaky", data_format="channels_last", pooling_width=2,
                 output_type='linear', loss="mae", pooling="max", learning_rate=0.0001, verbose=1)
     x_data = np.random.normal(size=[num_examples] + list(conv_input_shape))
     y_data = np.random.normal(size=num_examples)
@@ -57,7 +57,7 @@ def test_ResNet():
               'pooling_width': 2, 'hidden_activation': 'leaky',
               'output_type': 'linear', 'loss': 'mse',
               'pooling': 'max',
-              'data_format': 'channels_first',
+              'data_format': 'channels_last',
               'optimizer': 'adam', 'batch_size': 16,
               'epochs': 1, 'learning_rate': 0.0001, 'verbose': 1}
     rn2 = ResNet(**config)

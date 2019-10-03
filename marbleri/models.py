@@ -1,16 +1,18 @@
-from keras.layers import Dense, Conv2D, Activation, Input, Flatten, AveragePooling2D, MaxPool2D, LeakyReLU, Dropout, Add
-from keras.layers import BatchNormalization, Concatenate, Layer, SpatialDropout2D
-from keras.models import Model
-from keras.optimizers import Adam, SGD
-from keras.losses import mean_squared_error, mean_absolute_error
-from keras.utils import multi_gpu_model
-from keras.regularizers import l2
-from functools import partial
+from tensorflow.keras.layers import Dense, Conv2D, Activation, Input, Flatten, AveragePooling2D, MaxPool2D, LeakyReLU, Dropout, Add
+from tensorflow.keras.layers import BatchNormalization, Concatenate, Layer, SpatialDropout2D
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam, SGD
+from tensorflow.keras.losses import mean_squared_error, mean_absolute_error
+from tensorflow.keras.utils import multi_gpu_model
+from tensorflow.keras.regularizers import l2
 import numpy as np
-import keras.backend as K
+import tensorflow.keras.backend as K
 import tensorflow_probability as tfp
 tfd = tfp.distributions
-from horovod.keras import DistributedOptimizer
+try:
+    from horovod.keras import DistributedOptimizer
+except ImportError:
+    print("Horovod not available")
 import tensorflow as tf
 
 class NormOut(Layer):
@@ -550,7 +552,7 @@ class ResNet(BaseConvNet):
             norm_axis = 1
         else:
             norm_axis = -1
-        if in_layer.shape[norm_axis].value != filters:
+        if in_layer.shape[norm_axis] != filters:
             x = Conv2D(filters, self.filter_width, data_format=self.data_format, padding="same")(in_layer)
         else:
             x = in_layer
