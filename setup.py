@@ -14,7 +14,7 @@ requires = ["numpy>=1.14",
             "xarray",
             "netcdf4",
             "scikit-learn>=0.2",
-            "tensorflow>=2.0"]
+            ]
 
 if __name__ == "__main__":
     setup(name="marbleri",
