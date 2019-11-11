@@ -1,9 +1,9 @@
 import xarray as xr
-from keras.utils import Sequence
 from os.path import exists, join
 import pandas as pd
 import numpy as np
 import re
+from glob import glob
 
 
 class HWRFStep(object):
@@ -56,10 +56,10 @@ class HWRFStep(object):
         if variable_name not in list(self.ds.variables):
             raise KeyError(variable_name + " not available in " + self.filename)
         if subset is None:
-            subset_y = slice(0, self.ds.dims["lat_0"])
+            subset_y = slice(self.ds.dims["lat_0"], 0, -1)
             subset_x = slice(0, self.ds.dims["lon_0"])
         else:
-            subset_y = slice(subset[0], subset[1])
+            subset_y = slice(subset[1], subset[0], -1)
             subset_x = slice(subset[0], subset[1])
         if level is None:
             if len(self.ds.variables[variable_name].shape) == 3:
@@ -83,24 +83,34 @@ class HWRFStep(object):
 
 
 class BestTrackNetCDF(object):
+    """
+    Reads and processes the Best Track NetCDF files.
+
+    """
     def __init__(self,
-                 atl_filename="diag_2015_2017_adecks_atl_bug_corrected.nc",
-                 epo_filename="diag_2015_2017_adecks_epo_bug_corrected.nc",
-                 file_path="/glade/p/ral/nsap/rozoff/hfip/besttrack_predictors/"):
-        self.atl_filename = atl_filename
-        self.epo_filename = epo_filename
+                 file_path="/glade/p/ral/nsap/rozoff/hfip/besttrack_predictors/",
+                 file_start="diag_2015_2017"):
+        best_track_files = sorted(glob(join(file_path, file_start + "*.nc")))
+        if len(best_track_files) < 2:
+            raise FileNotFoundError("Matching best track files not found in " + file_path + "with start " + file_start)
+        self.atl_filename = best_track_files[0]
+        self.epo_filename = best_track_files[1]
         self.file_path = file_path
         self.bt_ds = dict()
         self.bt_ds["l"] = xr.open_dataset(join(self.file_path, self.atl_filename))
         self.bt_ds["e"] = xr.open_dataset(join(self.file_path, self.epo_filename))
         self.bt_runs = dict()
         self.run_columns = ["DATE", "STNAM", "STNUM", "BASIN"]
+        # Some of the variables have (time, nrun) as the dimensions, which causes problems when trying to use
+        # the xarray.to_dataframe() function. Changing the dimension from nrun to run fixes the problem.
         for basin in ["l", "e"]:
-            self.bt_ds[basin]["vmax_bt_newer"] = xr.DataArray(self.bt_ds[basin]["vmax_bt_new"], dims=("time", "run"))
+            for variable in self.bt_ds[basin].variables.keys():
+                if self.bt_ds[basin][variable].dims == ("time", "nrun"):
+                    self.bt_ds[basin][variable] = xr.DataArray(self.bt_ds[basin][variable], dims=("time", "run"))
         for basin in self.bt_ds.keys():
             self.bt_runs[basin] = self.bt_ds[basin][self.run_columns].to_dataframe()
             for col in self.bt_runs[basin].columns:
-                self.bt_runs[basin][col] = self.bt_runs[basin][col].str.strip().str.decode("utf-8")
+                self.bt_runs[basin][col] = self.bt_runs[basin][col].str.decode("utf-8").str.strip()
 
     def get_storm_variables(self, variables, run_date, storm_name, storm_number, basin, forecast_hour):
         b_runs = self.bt_runs[basin]
@@ -123,6 +133,7 @@ class BestTrackNetCDF(object):
             basin_dfs.append(pd.merge(self.bt_runs[basin], self.bt_ds[basin][variables].to_dataframe(), how="right",
                                       left_index=True, right_index=True))
             print(basin_dfs[-1])
+            
             if dropna:
                 basin_dfs[-1] = basin_dfs[-1].dropna()
         return pd.concat(basin_dfs, ignore_index=True)
@@ -131,73 +142,4 @@ class BestTrackNetCDF(object):
         for basin in self.bt_ds.keys():
             self.bt_ds[basin].close()
             del self.bt_ds[basin]
-
-
-def process_hwrf_run(run_date, storm_name, storm_number, basin, forecast_hour, variable_levels, subset_indices,
-                     hwrf_path, out_path):
-    hwrf_filename = join(hwrf_path, f"{storm_name}{storm_number:02d}{basin}.{run_date}.f{forecast_hour:03d}.nc")
-    hwrf_data = HWRFStep(hwrf_filename)
-
-    return
-
-class HWRFSequence(Sequence):
-    """
-
-
-    """
-    def __init__(self, hwrf_files, best_track, hwrf_variables, hwrf_variable_levels,
-                 best_track_input_variables, best_track_label_variables, batch_size,
-                 x_start=0, x_end=601, shuffle=True):
-        self.hwrf_files = hwrf_files
-        self.best_track = best_track
-        self.hwrf_variables = hwrf_variables
-        self.hwrf_variable_levels = hwrf_variable_levels
-        self.num_hwrf_variables = len(self.hwrf_variables)
-        self.best_track_input_variables = best_track_input_variables
-        self.num_best_track_input_variables = len(best_track_input_variables)
-        self.best_track_label_variables = best_track_label_variables
-        self.num_best_track_label_variables = len(best_track_label_variables)
-        self.batch_size = batch_size
-        self.x_subset = (x_start, x_end)
-        self.x_size = x_end - x_start
-        self.shuffle = True
-        self.indexes = np.arange(len(self.hwrf_files))
-        self.on_epoch_end()
-        self.shuffle = shuffle
-
-    def __len__(self):
-        return int(np.floor(len(self.hwrf_files) / self.batch_size))
-
-    def __getitem__(self, index):
-        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
-
-        # Generate data
-        X, y = self.__data_generation(indexes)
-        return X, y
-
-    def on_epoch_end(self):
-        self.indexes = np.arange(len(self.hwrf_files))
-        if self.shuffle:
-            np.random.shuffle(self.indexes)
-
-    def __data_generation(self, index_list_temp):
-        all_hwrf_patches = np.zeros((index_list_temp.size, self.x_size, self.x_size, self.num_hwrf_variables), dtype=np.float32)
-        all_best_track_input_data = np.zeros((index_list_temp.size, self.num_best_track_input_variables), dtype=np.float32)
-        all_best_track_label_data = np.zeros((index_list_temp.size, self.num_best_track_label_variables), dtype=np.float32)
-        for i, idx in enumerate(index_list_temp):
-            hwrf_file = self.hwrf_files[idx]
-            hwrf_data = HWRFStep(hwrf_file)
-            for v, variable in enumerate(self.hwrf_variables):
-                all_hwrf_patches[i, :, :, v] = hwrf_data.get_variable(variable, level=self.hwrf_variable_levels[v],
-                                                            subset=self.x_subset)
-                all_hwrf_patches[i, :, :, v][np.isnan(all_hwrf_patches[i, :, :, v])] = np.nanmin(all_hwrf_patches[i, :, :, v])
-            hwrf_data.close()
-            all_best_track_input_data[i] = self.best_track.get_storm_variables(self.best_track_input_variables,
-                                            hwrf_data.run_date, hwrf_data.storm_name, hwrf_data.storm_number,
-                                            hwrf_data.basin, hwrf_data.forecast_hour)
-            all_best_track_label_data[i] = self.best_track.get_storm_variables(self.best_track_label_variables,
-                                                                    hwrf_data.run_date, hwrf_data.storm_name,
-                                                                    hwrf_data.storm_number,
-                                                                    hwrf_data.basin, hwrf_data.forecast_hour)
-        return [all_hwrf_patches, all_best_track_input_data], all_best_track_label_data
 
