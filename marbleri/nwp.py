@@ -97,13 +97,14 @@ class BestTrackNetCDF(object):
         self.epo_filename = best_track_files[1]
         self.file_path = file_path
         self.bt_ds = dict()
+        self.basins = ["l", "e"]
         self.bt_ds["l"] = xr.open_dataset(join(self.file_path, self.atl_filename))
         self.bt_ds["e"] = xr.open_dataset(join(self.file_path, self.epo_filename))
         self.bt_runs = dict()
         self.run_columns = ["DATE", "STNAM", "STNUM", "BASIN"]
         # Some of the variables have (time, nrun) as the dimensions, which causes problems when trying to use
         # the xarray.to_dataframe() function. Changing the dimension from nrun to run fixes the problem.
-        for basin in ["l", "e"]:
+        for basin in self.basins:
             for variable in self.bt_ds[basin].variables.keys():
                 if self.bt_ds[basin][variable].dims == ("time", "nrun"):
                     self.bt_ds[basin][variable] = xr.DataArray(self.bt_ds[basin][variable], dims=("time", "run"))
@@ -125,6 +126,19 @@ class BestTrackNetCDF(object):
                 bt_values[0, v] = self.bt_ds[basin][variable][fh_index[0], run_index[0]].values
         bt_values[np.isnan(bt_values)] = 0
         return bt_values
+
+    def calc_time_differences(self, variables, time_difference_hours):
+        step_diff = int(time_difference_hours // 3)
+        for basin in self.basins:
+            for variable in variables:
+                if variable not in list(self.bt_ds[basin].variables.keys()):
+                    raise IndexError(variable + " not found in best track data")
+                diff_var = np.ones(self.bt_ds[basin][variable].shape, dtype=np.float32) * np.nan
+                diff_var[:-step_diff] = self.bt_ds[basin][variable][step_diff:].values - \
+                                       self.bt_ds[basin][variable][:-step_diff].values
+                diff_var_name = variable + "_dt_{0:02d}".format(time_difference_hours)
+                self.bt_ds[basin][diff_var_name] = xr.DataArray(diff_var, dims=("time", "run"), name=diff_var_name)
+        return
 
     def to_dataframe(self, variables, dropna=True):
         basin_dfs = []

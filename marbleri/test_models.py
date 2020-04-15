@@ -1,4 +1,4 @@
-from .models import StandardConvNet, crps_norm, crps_mixture, ResNet, NormOut, GaussianMixtureOut
+from .models import StandardConvNet, crps_norm, crps_mixture, ResNet, NormOut, GaussianMixtureOut, VariationalAutoEncoder
 import tensorflow.keras.backend as K
 import numpy as np
 
@@ -63,4 +63,30 @@ def test_ResNet():
     rn2 = ResNet(**config)
     rn2.fit(x_data, y_data)
     rn2.model.summary()
+    return
+
+def test_VariationalAutoEncoder():
+    from deepsky.kriging import random_field_generator
+    import matplotlib.pyplot as plt
+    x_grid, y_grid = np.meshgrid(np.arange(16), np.arange(16))
+    rfg = random_field_generator(x_grid, y_grid, length_scales=[16.0])
+    x = np.zeros((4096, 16, 16, 1), dtype=np.float32)
+    for i in range(x.shape[0]):
+        x[i] = next(rfg)
+    x_scaled = (x - x.min()) / (x.max() - x.min())
+    vae = VariationalAutoEncoder(latent_dim=8, learning_rate=0.0001, hidden_activation="leaky")
+    vae.fit(x_scaled, epochs=10, batch_size=64)
+    z_mean, z_var = vae.encode(x_scaled[:128])
+    sample = vae.reparameterize(z_mean, z_var)
+    x_new = vae.decode(sample, apply_sigmoid=True).numpy()
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
+    plt.pcolormesh(x_scaled[25, :, :, 0])
+    plt.colorbar()
+    plt.subplot(1, 2, 2)
+    print(x_new[25].min(), x_new[25].max())
+    print(x_scaled[25].min(), x_scaled[25].max())
+    plt.pcolormesh(x_new[25, :, :, 0])
+    plt.colorbar()
+    plt.savefig("test.png", dpi=200)
     return

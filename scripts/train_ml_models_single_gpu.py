@@ -2,12 +2,12 @@ import argparse
 import yaml
 from os.path import exists, join
 from os import makedirs, environ
-import keras.backend as K
+import tensorflow.keras.backend as K
 import tensorflow as tf
 import pandas as pd
 from marbleri.training import partition_storm_examples, BestTrackSequence
 from marbleri.models import BaseConvNet, StandardConvNet, ResNet
-from keras.callbacks import ModelCheckpoint, CSVLogger
+from tensorflow.keras.callbacks import ModelCheckpoint, CSVLogger
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 import logging

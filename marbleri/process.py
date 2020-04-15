@@ -32,6 +32,26 @@ def get_hwrf_filenames(best_track_df, hwrf_path, extension=".nc"):
     return np.array(hwrf_filenames)
 
 
+def process_hwrf_time_differences(best_track_df, variable_levels, time_difference_hours,
+                                  subset_indices, hwrf_path, out_path):
+    """
+    Load HWRF run, calculate the grid cell differences between fields at two forecast hours and save the differences
+    to netCDF files.
+
+    Args:
+        best_track_df: Dataframe containing valid HWRF time steps to be extracted
+        variable_levels: list of tuples containing the variable and the pressure level being extracted.
+        subset_indices:
+        hwrf_path: Path to HWRF netCDF files
+        out_path: Path to where difference netCDF files are saved.
+
+    Returns:
+
+    """
+
+    return
+
+
 def process_all_hwrf_runs(hwrf_files, variable_levels, subset_indices, norm_values, global_norm, out_path,
                           n_workers, dask_client):
     """
