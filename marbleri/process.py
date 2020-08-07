@@ -6,7 +6,11 @@ import os
 from dask.distributed import as_completed
 import xarray as xr
 import logging
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 
+scaler_classes = {"StandardScaler": StandardScaler,
+                  "MinMaxScaler": MinMaxScaler,
+                  "RobustScaler": RobustScaler}
 
 def get_hwrf_filenames(best_track_df, hwrf_path, extension=".nc"):
     """

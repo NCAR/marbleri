@@ -23,6 +23,7 @@ best_track_inputs: ["RMW", "VMAX", "MIN_SLP", "SHR_MAG", "SST", "LAND", "TPW", "
                     "STM_SPD", "RHLO", "RHMD", "RHHI", "INST1", "INST2"]
 best_track_output: "vmax_bt_new"
 best_track_output_comparisons: ["VMAX"]
+best_track_scaler: "RobustScaler"
 output_bins: [-40, 40, 5]
 out_path: "/glade/p/ral/allral/dgagne/hfip/hwrf_2020_output/"
 n_jobs: 16
