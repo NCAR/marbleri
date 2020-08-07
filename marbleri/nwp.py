@@ -87,6 +87,7 @@ class BestTrackNetCDF(object):
     Reads and processes the Best Track NetCDF files.
 
     """
+
     def __init__(self,
                  file_path="/glade/p/ral/nsap/rozoff/hfip/besttrack_predictors/",
                  file_start="diag_2015_2017"):
@@ -119,9 +120,9 @@ class BestTrackNetCDF(object):
                              (b_runs["STNAM"] == storm_name) &
                              (b_runs["STNUM"] == storm_number))[0]
         fh_index = np.where(self.bt_ds[basin]["TIME"] == forecast_hour)[0]
-        
+
         bt_values = np.zeros((1, len(variables)))
-        if len(run_index) > 0 and len(fh_index) > 0: 
+        if len(run_index) > 0 and len(fh_index) > 0:
             for v, variable in enumerate(variables):
                 bt_values[0, v] = self.bt_ds[basin][variable][fh_index[0], run_index[0]].values
         bt_values[np.isnan(bt_values)] = 0
@@ -135,7 +136,7 @@ class BestTrackNetCDF(object):
                     raise IndexError(variable + " not found in best track data")
                 diff_var = np.ones(self.bt_ds[basin][variable].shape, dtype=np.float32) * np.nan
                 diff_var[:-step_diff] = self.bt_ds[basin][variable][step_diff:].values - \
-                                       self.bt_ds[basin][variable][:-step_diff].values
+                                        self.bt_ds[basin][variable][:-step_diff].values
                 diff_var_name = variable + "_dt_{0:02d}".format(time_difference_hours)
                 self.bt_ds[basin][diff_var_name] = xr.DataArray(diff_var, dims=("time", "run"), name=diff_var_name)
         return
@@ -146,8 +147,6 @@ class BestTrackNetCDF(object):
             print(basin)
             basin_dfs.append(pd.merge(self.bt_runs[basin], self.bt_ds[basin][variables].to_dataframe(), how="right",
                                       left_index=True, right_index=True))
-            print(basin_dfs[-1])
-            
             if dropna:
                 basin_dfs[-1] = basin_dfs[-1].dropna()
         return pd.concat(basin_dfs, ignore_index=True)
