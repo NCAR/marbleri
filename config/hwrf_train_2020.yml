@@ -1,4 +1,5 @@
 data_modes: ["train", "val", "test"]
+
 hwrf_data_paths:
   train: "/glade/p/ral/nsap/rozoff/hfip/reforecast_rotated/"
   val: "/glade/p/ral/nsap/rozoff/hfip/realtime_rotated/"
@@ -26,7 +27,7 @@ best_track_output_comparisons: ["VMAX"]
 best_track_scaler: "RobustScaler"
 output_bins: [-40, 40, 5]
 out_path: "/glade/p/ral/allral/dgagne/hfip/hwrf_2020_output/"
-n_jobs: 16
+n_workers: 16
 models:
   random_forest_discrete:
     model_type: "RandomForestClassifier"
@@ -92,17 +93,17 @@ models:
     output_type: "discrete"
     config:
       min_filters: 16
-        pooling_width: 2
-        scalar_hidden_layers: 2
-        scalar_hidden_neurons: 32
-        output_type: "discrete"
-        loss: "categorical_crossentropy"
-        pooling: "max"
-        data_format: "channels_first"
-        l2_alpha: 0
-        optimizer: "adam"
-        batch_size: 128
-        epochs: 20
-        learning_rate: 0.0001
-        verbose: 1
+      pooling_width: 2
+      scalar_hidden_layers: 2
+      scalar_hidden_neurons: 32
+      output_type: "discrete"
+      loss: "categorical_crossentropy"
+      pooling: "max"
+      data_format: "channels_first"
+      l2_alpha: 0
+      optimizer: "adam"
+      batch_size: 128
+      epochs: 20
+      learning_rate: 0.0001
+      verbose: 1
 

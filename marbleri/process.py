@@ -50,6 +50,7 @@ def get_hwrf_filenames_diff(best_track_df, hwrf_path, diff=24, extension=".nc"):
     """
     hwrf_filenames_start = []
     hwrf_filenames_end = []
+    print(best_track_df.columns)
     for i in range(best_track_df.shape[0]):
         storm_name = best_track_df.loc[i, "STNAM"]
         storm_number = int(best_track_df.loc[i, "STNUM"])

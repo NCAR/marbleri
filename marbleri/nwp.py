@@ -102,7 +102,7 @@ class BestTrackNetCDF(object):
         self.bt_ds["l"] = xr.open_dataset(join(self.file_path, self.atl_filename))
         self.bt_ds["e"] = xr.open_dataset(join(self.file_path, self.epo_filename))
         self.bt_runs = dict()
-        self.run_columns = ["DATE", "STNAM", "STNUM", "BASIN"]
+        self.run_columns = ["DATE", "TIME", "STNAM", "STNUM", "BASIN"]
         # Some of the variables have (time, nrun) as the dimensions, which causes problems when trying to use
         # the xarray.to_dataframe() function. Changing the dimension from nrun to run fixes the problem.
         for basin in self.basins:
