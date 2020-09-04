@@ -325,7 +325,7 @@ class MixedConvNet(object):
         scalar_hidden_neurons (int): Number of neurons in each dense hidden layer.
         hidden_activation (str): The nonlinear activation function applied after each convolutional layer. If "leaky", a leaky ReLU with
             alpha=0.1 is used.
-        output_type (str): "linear" (deterministic), "gaussian" (mean and standard deviation), or "mixture_2"
+        output_type (str): "linear" (deterministic), "gaussian" (mean and standard deviation), "discrete", or "mixture_2"
             (gaussian mixture model with number of Gaussians as the part the underscore.
         pooling (str): If mean, then :class:`keras.layers.AveragePooling2D` is used for pooling. If max, then :class:`keras.layers.MaxPool2D` is used.
         use_dropout (bool): If True, then a :class:`keras.layers.Dropout` layer is inserted between the final convolution block

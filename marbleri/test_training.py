@@ -45,20 +45,5 @@ def test_best_track_sequence():
     if not exists(path):
         makedirs(path)
     create_synthetic_netcdfs(best_track_data, input_cols, data_width, path)
-    bts = BestTrackSequence(best_track_data, None, [], output_col, input_cols, batch_size, path,
-                            domain_width=data_width)
-    assert len(bts) == best_track_data.shape[0] // batch_size
-    # assert np.count_nonzero(np.isnan(bts.conv_inputs)) == 0
-    for i in range(len(bts)):
-        batch = bts[i]
-        assert batch[0].shape == (batch_size, len(input_cols), data_width, data_width)
-        assert np.count_nonzero(~np.isfinite(batch[0])) == 0
-        assert np.count_nonzero(~np.isfinite(batch[1])) == 0
-    bcn = BaseConvNet(min_filters=4, verbose=1, epochs=5)
-    bcn.fit_generator(bts)
-    for layer in bcn.model.layers:
-        weights = layer.get_weights()
-        if len(weights) > 0:
-            for weight in weights:
-                assert np.count_nonzero(~np.isfinite(weight)) == 0
+
     return
