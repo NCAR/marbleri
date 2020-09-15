@@ -102,7 +102,7 @@ class BestTrackNetCDF(object):
         self.bt_ds["l"] = xr.open_dataset(join(self.file_path, self.atl_filename))
         self.bt_ds["e"] = xr.open_dataset(join(self.file_path, self.epo_filename))
         self.bt_runs = dict()
-        self.run_columns = ["DATE", "TIME", "STNAM", "STNUM", "BASIN"]
+        self.run_columns = ["DATE", "STNAM", "STNUM", "BASIN"]
         # Some of the variables have (time, nrun) as the dimensions, which causes problems when trying to use
         # the xarray.to_dataframe() function. Changing the dimension from nrun to run fixes the problem.
         for basin in self.basins:
@@ -110,6 +110,7 @@ class BestTrackNetCDF(object):
                 if self.bt_ds[basin][variable].dims == ("time", "nrun"):
                     self.bt_ds[basin][variable] = xr.DataArray(self.bt_ds[basin][variable], dims=("time", "run"))
         for basin in self.bt_ds.keys():
+            print(basin)
             self.bt_runs[basin] = self.bt_ds[basin][self.run_columns].to_dataframe()
             for col in self.bt_runs[basin].columns:
                 self.bt_runs[basin][col] = self.bt_runs[basin][col].str.decode("utf-8").str.strip()
@@ -143,9 +144,12 @@ class BestTrackNetCDF(object):
 
     def to_dataframe(self, variables, dropna=True):
         basin_dfs = []
+        variables_list = list(variables)
+        if "TIME" not in variables_list:
+            variables_list = ["TIME"] + variables_list
         for basin in self.bt_ds.keys():
             print(basin)
-            basin_dfs.append(pd.merge(self.bt_runs[basin], self.bt_ds[basin][variables].to_dataframe(), how="right",
+            basin_dfs.append(pd.merge(self.bt_runs[basin], self.bt_ds[basin][variables_list].to_dataframe(), how="right",
                                       left_index=True, right_index=True))
             if dropna:
                 basin_dfs[-1] = basin_dfs[-1].dropna()

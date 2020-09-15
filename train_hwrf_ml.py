@@ -21,6 +21,8 @@ def main():
         raise FileNotFoundError(args.config + " not found.")
     with open(args.config, "r") as config_file:
         config = yaml.load(config_file, Loader=yaml.Loader)
+    for k, v in config.items():
+        print(k, ":", v)
     hwrf_data_paths = config["hwrf_data_paths"]
     # Initialize GPU memory
     gpus = tf.config.experimental.list_physical_devices('GPU')
