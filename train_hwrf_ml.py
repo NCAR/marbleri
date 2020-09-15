@@ -9,6 +9,7 @@ from marbleri.nwp import BestTrackNetCDF
 from dask.distributed import Client, LocalCluster
 import numpy as np
 import pandas as pd
+import os
 
 def main():
     parser = argparse.ArgumentParser()
@@ -69,11 +70,13 @@ def main():
                                                   input_var_levels,
                                                   scale_format=config["conv_inputs"]["scale_format"],
                                                   scale_values=conv_scale_values)
-
+    if not exists(config["out_path"]):
+        os.makedirs(config["out_path"])
+    model_objects = {}
     if args.train:
         print("Begin training")
-        model_objects = {}
         for model_name, model_config in config["models"].items():
+            print("Training", model_name)
             model_objects[model_name] = all_models[model_config["model_type"]](**model_config["config"])
             if model_config["output_type"] == "linear":
                 y_train = best_track_df["train"][output_field].values
@@ -94,6 +97,10 @@ def main():
                                               val_x=(best_track_df["val"][config["best_track_inputs"]],
                                                      hwrf_norm_data["val"]),
                                               val_y=y_val)
+            print("Saving", model_name)
+            tf.keras.models.save_model(model_objects[model_name].model_,
+                                       join(config["out_path"], "model_path" + ".h5"),
+                                       save_format="h5")
     return
 
 

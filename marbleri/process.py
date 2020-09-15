@@ -3,14 +3,13 @@ import pandas as pd
 from .nwp import HWRFStep
 from os.path import join, exists
 import os
-from dask.distributed import as_completed
 import xarray as xr
-import logging
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 
 scaler_classes = {"StandardScaler": StandardScaler,
                   "MinMaxScaler": MinMaxScaler,
                   "RobustScaler": RobustScaler}
+
 
 def get_hwrf_filenames(best_track_df, hwrf_path, extension=".nc"):
     """
@@ -57,11 +56,11 @@ def get_hwrf_filenames_diff(best_track_df, hwrf_path, diff=24, extension=".nc"):
         basin = best_track_df.loc[i, "BASIN"]
         run_date = best_track_df.loc[i, "DATE"]
         forecast_hour = int(best_track_df.loc[i, "TIME"])
-        fh_end = forecast_hour + diff
+        fh_start = forecast_hour - diff
         hwrf_filename_start = join(hwrf_path,
-                             f"{storm_name}{storm_number:02d}{basin}.{run_date}.f{forecast_hour:03d}" + extension)
+                             f"{storm_name}{storm_number:02d}{basin}.{run_date}.f{fh_start:03d}" + extension)
         hwrf_filename_end = join(hwrf_path,
-                             f"{storm_name}{storm_number:02d}{basin}.{run_date}.f{fh_end:03d}" + extension)
+                             f"{storm_name}{storm_number:02d}{basin}.{run_date}.f{forecast_hour:03d}" + extension)
         hwrf_filenames_start.append(hwrf_filename_start)
         hwrf_filenames_end.append(hwrf_filename_end)
     return np.array(hwrf_filenames_start), np.array(hwrf_filenames_end)
@@ -86,26 +85,6 @@ def get_var_levels(input_vars, pressure_levels):
             else:
                 input_var_levels.append((input_var + "_L100", pressure_level))
     return input_var_levels
-
-
-def process_hwrf_time_differences(best_track_df, variable_levels, time_difference_hours,
-                                  subset_indices, hwrf_path, out_path):
-    """
-    Load HWRF run, calculate the grid cell differences between fields at two forecast hours and save the differences
-    to netCDF files.
-
-    Args:
-        best_track_df: Dataframe containing valid HWRF time steps to be extracted
-        variable_levels: list of tuples containing the variable and the pressure level being extracted.
-        subset_indices:
-        hwrf_path: Path to HWRF netCDF files
-        out_path: Path to where difference netCDF files are saved.
-
-    Returns:
-
-    """
-
-    return
 
 
 def load_hwrf_data(hwrf_file_list, input_var_levels=None):
