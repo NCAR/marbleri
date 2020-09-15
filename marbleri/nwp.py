@@ -110,7 +110,12 @@ class BestTrackNetCDF(object):
         if len(self.best_track_files) == 1:
             self.bt_ds = xr.open_dataset(self.best_track_files[0])
         else:
-            self.bt_ds = xr.open_mfdataset(self.best_track_files)
+            bt_ds_list = [xr.open_dataset(ds) for ds in self.best_track_files]
+            for bt_ds in bt_ds_list:
+                for variable in bt_ds.variables.keys():
+                    if bt_ds[variable].dims == ("time", "nrun"):
+                        bt_ds[variable] = xr.DataArray(bt_ds[variable], dims=("time", "run"))
+            self.bt_ds = xr.concat(bt_ds_list, "run")
         self.bt_runs = None
         self.run_columns = ["DATE", "STNAM", "STNUM", "BASIN"]
         # Some of the variables have (time, nrun) as the dimensions, which causes problems when trying to use
