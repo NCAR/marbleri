@@ -54,8 +54,8 @@ class HWRFStep(object):
         if variable_name not in list(self.ds.variables):
             raise KeyError(variable_name + " not available in " + self.filename)
         if subset is None:
-            subset_y = slice(self.ds.dims["lat_0"], 0, -1)
-            subset_x = slice(0, self.ds.dims["lon_0"])
+            subset_y = slice(self.ds.dims["y_0"], 0, -1)
+            subset_x = slice(0, self.ds.dims["x_0"])
         else:
             subset_y = slice(subset[1], subset[0], -1)
             subset_x = slice(subset[0], subset[1])
