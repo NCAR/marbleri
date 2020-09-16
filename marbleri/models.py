@@ -215,9 +215,11 @@ class BaseConvNet(object):
         conv_input_layer = Input(shape=conv_input_shape, name="conv_input")
         num_conv_layers = int(np.round((np.log(conv_input_shape[1]) - np.log(self.min_data_width))
                                        / np.log(self.pooling_width)))
+        print("Conv Layers", num_conv_layers)
         num_filters = self.min_filters
         scn_model = conv_input_layer
         for c in range(num_conv_layers):
+            print(conv_input_shape[1] / (self.pooling_width ** c))
             scn_model = Conv2D(num_filters, (self.filter_width, self.filter_width),
                                data_format=self.data_format,
                                kernel_regularizer=reg, padding="same", name="conv_{0:02d}".format(c))(scn_model)

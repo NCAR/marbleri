@@ -64,12 +64,13 @@ models:
     output_type: "linear"
     config:
       min_filters: 16
+      min_data_width: 12
       pooling_width: 2
-      dense_neurons: 32
+      dense_neurons: 64
       output_type: "linear"
       loss: "mae"
       pooling: "max"
-      data_format: "channels_first"
+      data_format: "channels_last"
       l2_alpha: 0
       optimizer: "adam"
       batch_size: 128
@@ -82,12 +83,13 @@ models:
     output_type: "discrete"
     config:
       min_filters: 16
+      min_data_width: 12
       pooling_width: 2
-      dense_neurons: 32
+      dense_neurons: 64
       output_type: "discrete"
       loss: "categorical_crossentropy"
       pooling: "max"
-      data_format: "channels_first"
+      data_format: "channels_last"
       l2_alpha: 0
       optimizer: "adam"
       batch_size: 128
@@ -100,13 +102,14 @@ models:
     output_type: "discrete"
     config:
       min_filters: 16
+      min_data_width: 12
       pooling_width: 2
       scalar_hidden_layers: 2
-      scalar_hidden_neurons: 32
+      scalar_hidden_neurons: 128
       output_type: "discrete"
       loss: "categorical_crossentropy"
       pooling: "max"
-      data_format: "channels_first"
+      data_format: "channels_last"
       l2_alpha: 0
       optimizer: "adam"
       batch_size: 128
