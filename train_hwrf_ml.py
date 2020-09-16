@@ -35,7 +35,6 @@ def main():
     best_track_df = {}
     dt = config["time_difference_hours"]
     best_track_inputs_dt = [f"{bt}_dt_{dt:d}" for bt in config["best_track_inputs"]]
-    best_track_inputs_dt += [config["best_track_output"] + f"_dt_{dt:d}"]
     best_track_input_norm = {}
     input_var_levels = get_var_levels(config["conv_inputs"]["variables"], config["conv_inputs"]["levels"])
     output_field = config["best_track_output"] + f"_dt_{dt:d}"
@@ -50,11 +49,11 @@ def main():
     client = Client(cluster)
     conv_scale_values = None
     for mode in data_modes:
-        print("Loading ", mode)
+        print("Loading " + mode)
         best_track_nc[mode] = BestTrackNetCDF(**config["best_track_data_paths"][mode])
         best_track_nc[mode].calc_time_differences(config["best_track_inputs"], config["time_difference_hours"])
         best_track_nc[mode].calc_time_differences([config["best_track_output"]], config["time_difference_hours"])
-        best_track_df[mode] = best_track_nc[mode].to_dataframe(best_track_inputs_dt)
+        best_track_df[mode] = best_track_nc[mode].to_dataframe(best_track_inputs_dt + [output_field])
         if mode == "train":
             best_track_input_norm[mode] = pd.DataFrame(best_track_scaler.fit_transform(
                 best_track_df[mode][best_track_inputs_dt]), columns=best_track_inputs_dt)
@@ -70,6 +69,7 @@ def main():
         hwrf_files_se = np.vstack([hwrf_filenames_start, hwrf_filenames_end]).T
         hwrf_field_data[mode] = load_hwrf_data_distributed(hwrf_files_se, input_var_levels, client, subset=conv_subset)
         hwrf_norm_data[mode], \
+        print("Normalize " + mode)
         conv_scale_values = normalize_hwrf_loaded_data(hwrf_field_data[mode],
                                                   input_var_levels,
                                                   scale_format=config["conv_inputs"]["scale_format"],
@@ -93,12 +93,12 @@ def main():
                                               val_y=y_val)
             elif model_config["input_type"] == "scalar":
                 model_objects[model_name].fit(best_track_input_norm["train"].values, y_train,
-                                              val_x=best_track_df["val"][config["best_track_inputs"]],
+                                              val_x=best_track_input_norm["val"].values,
                                               val_y=y_val)
             elif model_config["input_type"] == "mixed":
                 model_objects[model_name].fit((best_track_input_norm["train"].values,
                                                hwrf_norm_data["train"]), y_train,
-                                              val_x=(best_track_df["val"][config["best_track_inputs"]],
+                                              val_x=(best_track_input_norm["val"].values,
                                                      hwrf_norm_data["val"]),
                                               val_y=y_val)
             print("Saving", model_name)
