@@ -10,6 +10,7 @@ from dask.distributed import Client, LocalCluster
 import numpy as np
 import pandas as pd
 import os
+import pickle
 
 def main():
     parser = argparse.ArgumentParser()
@@ -100,8 +101,12 @@ def main():
                                                      hwrf_norm_data["val"]),
                                               val_y=y_val)
             print("Saving", model_name)
-            tf.keras.models.save_model(model_objects[model_name].model_,
-                                       join(config["out_path"], "model_path" + ".h5"),
+            if model_config["model_type"] == "RandomForestClassifier":
+                with open(join(config["out_path"], model_name + ".pkl"), "w") as out_pickle:
+                    pickle.dump(model_objects[model_name], out_pickle)
+            else:
+                tf.keras.models.save_model(model_objects[model_name].model_,
+                                       join(config["out_path"], model_name + ".h5"),
                                        save_format="h5")
     return
 
