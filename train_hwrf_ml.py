@@ -92,9 +92,7 @@ def main():
                 model_objects[model_name].fit(hwrf_norm_data["train"], y_train, val_x=hwrf_norm_data["val"],
                                               val_y=y_val)
             elif model_config["input_type"] == "scalar":
-                model_objects[model_name].fit(best_track_input_norm["train"].values, y_train,
-                                              val_x=best_track_input_norm["val"].values,
-                                              val_y=y_val)
+                model_objects[model_name].fit(best_track_input_norm["train"].values, y_train)
             elif model_config["input_type"] == "mixed":
                 model_objects[model_name].fit((best_track_input_norm["train"].values,
                                                hwrf_norm_data["train"]), y_train,
