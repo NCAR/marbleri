@@ -68,8 +68,8 @@ def main():
         print(hwrf_filenames_start[0], hwrf_filenames_end[0])
         hwrf_files_se = np.vstack([hwrf_filenames_start, hwrf_filenames_end]).T
         hwrf_field_data[mode] = load_hwrf_data_distributed(hwrf_files_se, input_var_levels, client, subset=conv_subset)
-        hwrf_norm_data[mode], \
         print("Normalize " + mode)
+        hwrf_norm_data[mode], \
         conv_scale_values = normalize_hwrf_loaded_data(hwrf_field_data[mode],
                                                   input_var_levels,
                                                   scale_format=config["conv_inputs"]["scale_format"],
