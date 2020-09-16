@@ -102,7 +102,7 @@ def main():
                                               val_y=y_val)
             print("Saving", model_name)
             if model_config["model_type"] == "RandomForestClassifier":
-                with open(join(config["out_path"], model_name + ".pkl"), "w") as out_pickle:
+                with open(join(config["out_path"], model_name + ".pkl"), "wb") as out_pickle:
                     pickle.dump(model_objects[model_name], out_pickle)
             else:
                 tf.keras.models.save_model(model_objects[model_name].model_,
