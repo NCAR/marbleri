@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
+from numba import njit
 from .nwp import HWRFStep
-from os.path import join, exists
+from os.path import join, exists, getsize
 import os
 import xarray as xr
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
@@ -49,18 +50,18 @@ def get_hwrf_filenames_diff(best_track_df, hwrf_path, diff=24, extension=".nc"):
     """
     hwrf_filenames_start = []
     hwrf_filenames_end = []
-    print(best_track_df.columns)
     for i in range(best_track_df.shape[0]):
-        storm_name = best_track_df.loc[i, "STNAM"]
-        storm_number = int(best_track_df.loc[i, "STNUM"])
-        basin = best_track_df.loc[i, "BASIN"]
-        run_date = best_track_df.loc[i, "DATE"]
-        forecast_hour = int(best_track_df.loc[i, "TIME"])
+        idx = best_track_df.index[i]
+        storm_name = best_track_df.loc[idx, "STNAM"]
+        storm_number = best_track_df.loc[idx, "STNUM"]
+        basin = best_track_df.loc[idx, "BASIN"]
+        run_date = best_track_df.loc[idx, "DATE"]
+        forecast_hour = int(best_track_df.loc[idx, "TIME"])
         fh_start = forecast_hour - diff
         hwrf_filename_start = join(hwrf_path,
-                             f"{storm_name}{storm_number:02d}{basin}.{run_date}.f{fh_start:03d}" + extension)
+                             f"{storm_name}{storm_number}{basin}.{run_date}.f{fh_start:03d}" + extension)
         hwrf_filename_end = join(hwrf_path,
-                             f"{storm_name}{storm_number:02d}{basin}.{run_date}.f{forecast_hour:03d}" + extension)
+                             f"{storm_name}{storm_number}{basin}.{run_date}.f{forecast_hour:03d}" + extension)
         hwrf_filenames_start.append(hwrf_filename_start)
         hwrf_filenames_end.append(hwrf_filename_end)
     return np.array(hwrf_filenames_start), np.array(hwrf_filenames_end)
@@ -102,7 +103,7 @@ def load_hwrf_data(hwrf_file_list, input_var_levels=None):
     return train_data
 
 
-def load_data_diff(hwrf_file_list, input_var_levels=None):
+def load_data_diff(hwrf_file_list, input_var_levels=None, subset=None):
     """
     Load HWRF netCDF files that contain the time differences between fields.
 
@@ -113,23 +114,26 @@ def load_data_diff(hwrf_file_list, input_var_levels=None):
     Returns:
 
     """
-    data = []
-    step_data = []
+    if subset is None:
+        subset = (0, 126)
+    subset_size = subset[1] - subset[0]
+    data = np.zeros((len(hwrf_file_list), subset_size, subset_size, len(input_var_levels)), dtype=np.float32)
     for t, train_file in enumerate(hwrf_file_list):
+        if not (exists(train_file[0]) and exists(train_file[1])):
+            continue
+        if getsize(train_file[0]) == 0 or getsize(train_file[1]) == 0:
+            # Do not fill in data if either file contains no information
+            continue
         step_start = HWRFStep(train_file[0])
         step_end = HWRFStep(train_file[1])
-        for var in input_var_levels:
-            step_data.append(step_end.get_variable(var[0], level=var[1]).values - step_start.get_variable(var[0], level=var[1]).values)
+        for v, var in enumerate(input_var_levels):
+            data[t, :, :, v] = step_end.get_variable(var[0], level=var[1], subset=subset).values - step_start.get_variable(var[0], level=var[1], subset=subset).values
         step_end.close()
         step_start.close()
-        del step_start, step_end
-        data.append(np.stack(step_data, axis=-1))
-        del step_data[:]
-    train_data = np.stack(data, axis=0)
-    return train_data
+    return data
 
 
-def load_hwrf_data_distributed(hwrf_file_list, input_var_levels, client):
+def load_hwrf_data_distributed(hwrf_file_list, input_var_levels, client, subset=None):
     """
     Load data in parallel with dask.
 
@@ -145,7 +149,7 @@ def load_hwrf_data_distributed(hwrf_file_list, input_var_levels, client):
     slice_indices = np.linspace(0, len(hwrf_file_list), n_workers + 1).astype(int)
     hwrf_subsets = [hwrf_file_list[slice_index:slice_indices[s + 1]]
                     for s, slice_index in enumerate(slice_indices[:-1])]
-    out = client.map(load_data_diff, hwrf_subsets, input_var_levels=input_var_levels)
+    out = client.map(load_data_diff, hwrf_subsets, input_var_levels=input_var_levels, subset=subset)
     all_data = np.vstack(client.gather(out))
     return all_data
 
@@ -304,29 +308,47 @@ def get_var_level_strings(variable_levels):
             var_level_str.append(var_level[0] + "_surface")
     return var_level_str
 
+@njit(parallel=True)
+def par_mean(x):
+    return np.mean(x)
+
+@njit(parallel=True)
+def par_std(x):
+    return np.std(x)
+
+@njit(parallel=True)
+def par_norm_scale(x, mean_val, sd_val):
+    return (x - mean_val) / sd_val
+
+@njit(parallel=True)
+def par_minmax_scale(x, min_val, max_val):
+    r_val = 1.0 / (max_val - min_val)
+    return (x - min_val) * r_val
+
 def normalize_hwrf_loaded_data(hwrf_field_data, var_levels, scale_format="standard", scale_values=None):
     hwrf_norm_data = np.zeros(hwrf_field_data.shape, dtype=hwrf_field_data.dtype)
+    var_level_str = get_var_level_strings(var_levels)
     if scale_format == "standard":
         scale_columns = ("mean", "sd")
     else:
         scale_columns = ("min", "max")
     if scale_values is None:
-        scale_values = pd.DataFrame(0, index=var_levels, columns=scale_columns,
+        scale_values = pd.DataFrame(0, index=var_level_str, columns=scale_columns,
                                     dtype=hwrf_field_data.dtype)
         if scale_format == "standard":
-            for v in range(len(var_levels)):
-                scale_values.loc[var_levels[v], "mean"] = hwrf_field_data[..., v].mean()
-                scale_values.loc[var_levels[v], "sd"] = hwrf_field_data[..., v].std()
+            for v in range(len(var_level_str)):
+                scale_values.loc[var_level_str[v], "mean"] = par_mean(hwrf_field_data[..., v])
+                scale_values.loc[var_level_str[v], "sd"] = par_std(hwrf_field_data[..., v])
         else:
             for v in range(len(var_levels)):
-                scale_values.loc[var_levels[v], "min"] = hwrf_field_data[..., v].min()
-                scale_values.loc[var_levels[v], "max"] = hwrf_field_data[..., v].max()
+                scale_values.loc[var_level_str[v], "min"] = hwrf_field_data[..., v].min()
+                scale_values.loc[var_level_str[v], "max"] = hwrf_field_data[..., v].max()
     if scale_format == "standard":
         for v in range(len(var_levels)):
-            hwrf_norm_data[..., v] = (hwrf_field_data[..., v]- scale_values.loc[var_levels[v], "mean"]) / scale_values.loc[var_levels[v], "sd"]
+            hwrf_norm_data[..., v] = par_norm_scale(hwrf_field_data[..., v], scale_values.loc[var_level_str[v], "mean"],  scale_values.loc[var_level_str[v], "sd"])
     else:
         for v in range(len(var_levels)):
-            hwrf_norm_data[..., v] = (hwrf_field_data[..., v] - scale_values.loc[var_levels[v], "min"]) / (scale_values.loc[var_levels[v], "max"] - scale_values.loc[var_levels[v], "min"])
+            hwrf_norm_data[..., v] = par_minmax_scale(hwrf_field_data[..., v], scale_values.loc[var_level_str[v], "min"], scale_values.loc[var_level_str[v], "max"])
     return hwrf_norm_data, scale_values
 
 
