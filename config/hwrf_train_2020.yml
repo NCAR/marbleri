@@ -51,12 +51,12 @@ models:
     output_type: "discrete"
     config:
       hidden_layers: 2
-      hidden_neurons: 50
+      hidden_neurons: 64
       activation: "relu"
       output_type: "discrete"
-      batch_size: 128
+      batch_size: 256
       epochs: 30
-      learning_rate: 0.0001
+      learning_rate: 0.001
       verbose: 1
   conv_linear:
     model_type: "BaseConvNet"
@@ -64,18 +64,18 @@ models:
     output_type: "linear"
     config:
       min_filters: 16
-      min_data_width: 12
+      min_data_width: 24
       pooling_width: 2
-      dense_neurons: 64
+      dense_neurons: 128
       output_type: "linear"
       loss: "mae"
       pooling: "max"
       data_format: "channels_last"
       l2_alpha: 0
       optimizer: "adam"
-      batch_size: 128
+      batch_size: 256
       epochs: 30
-      learning_rate: 0.0001
+      learning_rate: 0.001
       verbose: 1
   conv_discrete:
     model_type: "BaseConvNet"
@@ -83,7 +83,7 @@ models:
     output_type: "discrete"
     config:
       min_filters: 16
-      min_data_width: 12
+      min_data_width: 24
       pooling_width: 2
       dense_neurons: 64
       output_type: "discrete"
@@ -92,9 +92,9 @@ models:
       data_format: "channels_last"
       l2_alpha: 0
       optimizer: "adam"
-      batch_size: 128
+      batch_size: 256
       epochs: 30
-      learning_rate: 0.0001
+      learning_rate: 0.001
       verbose: 1
   conv_mixed:
     model_type: "MixedConvNet"
@@ -102,7 +102,7 @@ models:
     output_type: "discrete"
     config:
       min_filters: 16
-      min_data_width: 12
+      min_data_width: 24
       pooling_width: 2
       scalar_hidden_layers: 2
       scalar_hidden_neurons: 128
@@ -112,7 +112,7 @@ models:
       data_format: "channels_last"
       l2_alpha: 0
       optimizer: "adam"
-      batch_size: 128
+      batch_size: 256
       epochs: 30
       learning_rate: 0.0001
       verbose: 1

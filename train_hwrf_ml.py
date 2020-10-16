@@ -88,7 +88,7 @@ def main():
                 y_val = best_track_df["val"][output_field].values
             else:
                 y_train = best_track_output_discrete["train"]
-                y_val = best_track_output_discrete["train"]
+                y_val = best_track_output_discrete["val"]
             if model_config["input_type"] == "conv":
                 model_objects[model_name].fit(hwrf_norm_data["train"], y_train, val_x=hwrf_norm_data["val"],
                                               val_y=y_val)

@@ -3,7 +3,7 @@ from tensorflow.keras.layers import Dense, Conv2D, Activation, Input, Flatten, A
 from tensorflow.keras.layers import BatchNormalization, Concatenate, Layer, SpatialDropout2D
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam, SGD
-from tensorflow.keras.losses import mean_squared_error, mean_absolute_error
+from tensorflow.keras.losses import binary_crossentropy, categorical_crossentropy, mean_squared_error, mean_absolute_error
 from tensorflow.keras.regularizers import l2
 import numpy as np
 import tensorflow.keras.backend as K
@@ -71,6 +71,8 @@ def crps_mixture(y_true, y_pred, cdf_points=np.arange(0, 200.0, 5.0)):
 
 losses = {"mse": mean_squared_error,
           "mae": mean_absolute_error,
+          "binary_crossentropy": binary_crossentropy,
+          "categorical_crossentropy": categorical_crossentropy, 
           "crps_norm": crps_norm,
           "crps_mixture": crps_mixture}
 
@@ -90,8 +92,10 @@ class DenseNeuralNet(object):
         elif "mixture" in output_type:
             self.num_mixtures = int(output_type.split("_")[1])
             self.loss = losses["crps_mixture"]
+        elif "discrete" == output_type:
+            self.loss = losses["categorical_crossentropy"]
         else:
-            self.loss = losses["mse"]
+            self.loss = losses["mae"]
         self.dropout_alpha = dropout_alpha
         self.optimizer = optimizer
         self.epochs = epochs
