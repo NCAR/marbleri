@@ -524,7 +524,7 @@ class ResNet(BaseConvNet):
 
     def __init__(self, min_filters=16, filter_growth_rate=2, filter_width=5, min_data_width=4, pooling_width=2,
                  hidden_activation="relu", output_type="linear",
-                 pooling="mean", use_dropout=False, dropout_alpha=0.0,
+                 pooling="mean", use_dropout=False, dropout_alpha=0.0, dense_neurons=64,
                  data_format="channels_last", optimizer="adam", loss="mse", leaky_alpha=0.1, metrics=None,
                  learning_rate=0.001, batch_size=1024, epochs=10, l2_alpha=0, verbose=0, **kwargs):
         super().__init__(min_filters=min_filters, filter_growth_rate=filter_growth_rate, filter_width=filter_width,
@@ -532,7 +532,7 @@ class ResNet(BaseConvNet):
                          hidden_activation=hidden_activation, data_format=data_format,
                          output_type=output_type, pooling=pooling, use_dropout=use_dropout,
                          dropout_alpha=dropout_alpha, optimizer=optimizer, loss=loss, metrics=metrics,
-                         leaky_alpha=leaky_alpha,
+                         leaky_alpha=leaky_alpha, dense_neurons=dense_neurons,
                          batch_size=batch_size, epochs=epochs,
                          verbose=verbose, learning_rate=learning_rate, l2_alpha=l2_alpha, **kwargs)
 

@@ -5,12 +5,14 @@ import tensorflow as tf
 from marbleri.process import get_hwrf_filenames_diff, get_var_levels, load_hwrf_data_distributed, \
     normalize_hwrf_loaded_data, discretize_output, scaler_classes
 from marbleri.models import all_models
+from marbleri.evaluate import linear_metrics, discrete_metrics, expected_value
 from marbleri.nwp import BestTrackNetCDF
 from dask.distributed import Client, LocalCluster
 import numpy as np
 import pandas as pd
 import os
 import pickle
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -32,6 +34,7 @@ def main():
         tf.config.experimental.set_memory_growth(gpu, True)
     data_modes = config["data_modes"]
     conv_subset = config["conv_inputs"]["subset"]
+    out_path = config["out_path"]
     best_track_nc = {}
     best_track_df = {}
     dt = config["time_difference_hours"]
@@ -45,6 +48,7 @@ def main():
                             config["output_bins"][1] + config["output_bins"][2],
                             config["output_bins"][2])
     best_track_output_discrete = {}
+    best_track_meta = {}
     best_track_scaler = scaler_classes[config["best_track_scaler"]]()
     cluster = LocalCluster(n_workers=config["n_workers"], threads_per_worker=1)
     client = Client(cluster)
@@ -55,6 +59,8 @@ def main():
         best_track_nc[mode].calc_time_differences(config["best_track_inputs"], config["time_difference_hours"])
         best_track_nc[mode].calc_time_differences([config["best_track_output"]], config["time_difference_hours"])
         best_track_df[mode] = best_track_nc[mode].to_dataframe(best_track_inputs_dt + [output_field])
+        all_meta_columns = best_track_nc[mode].run_columns + best_track_nc[mode].meta_columns
+        best_track_meta[mode] = best_track_df[mode][all_meta_columns]
         if mode == "train":
             best_track_input_norm[mode] = pd.DataFrame(best_track_scaler.fit_transform(
                 best_track_df[mode][best_track_inputs_dt]), columns=best_track_inputs_dt)
@@ -102,12 +108,53 @@ def main():
                                               val_y=y_val)
             print("Saving", model_name)
             if model_config["model_type"] == "RandomForestClassifier":
-                with open(join(config["out_path"], model_name + ".pkl"), "wb") as out_pickle:
+                with open(join(out_path, model_name + ".pkl"), "wb") as out_pickle:
                     pickle.dump(model_objects[model_name], out_pickle)
             else:
                 tf.keras.models.save_model(model_objects[model_name].model_,
-                                       join(config["out_path"], model_name + ".h5"),
-                                       save_format="h5")
+                                           join(out_path, model_name + ".h5"),
+                                           save_format="h5")
+            for mode in data_modes:
+                if model_config["input_type"] == "scalar":
+                    y_pred = model_objects[model_name].predict(best_track_input_norm["train"].values)
+                elif model_config["input_type"] == "mixed":
+                    y_pred = model_objects[model_name].predict((best_track_input_norm["train"].values,
+                                                                     hwrf_norm_data["train"]))
+                else:
+                    y_pred = model_objects[model_name].predict(hwrf_norm_data["train"])
+                if model_config["output_type"] == "linear":
+                    y_true = best_track_df[mode][output_field].values
+                    model_scores = linear_metrics(y_true, y_pred, best_track_meta[mode])
+                    print(f"{model_name} {mode} Linear Scores")
+                    print(model_scores)
+                    model_scores.to_csv(join(out_path, f"{model_name}_{mode}_linear_scores.csv"),
+                                        index_label="subset")
+                    pred_true_df = pd.DataFrame({output_field:y_true, model_name: y_pred},
+                                                index=best_track_meta[mode].index)
+                    pred_out = pd.merge(best_track_meta[mode], pred_true_df, left_index=True, right_index=True)
+                    pred_out.to_csv(join(out_path, f"{model_name}_{mode}_linear_predictions.csv"))
+                else:
+                    y_true = best_track_df[mode][output_field].values
+                    y_true_discrete = best_track_output_discrete[mode]
+                    y_pred_linear = expected_value(y_pred, output_bins)
+                    linear_model_scores = linear_metrics(y_true, y_pred_linear, best_track_meta[mode])
+                    print(f"{model_name} {mode} Linear Scores")
+                    print(linear_model_scores)
+                    linear_model_scores.to_csv(join(out_path, f"{model_name}_{mode}_linear_scores.csv"),
+                                        index_label="subset")
+                    discrete_model_scores = discrete_metrics(y_true_discrete, y_pred, output_bins,
+                                                             best_track_meta[mode])
+                    print(f"{model_name} {mode} Discrete Scores")
+                    print(discrete_model_scores)
+                    discrete_model_scores.to_csv(join(out_path, f"{model_name}_{mode}_discrete_scores.csv"),
+                                                 index_label="subset")
+                    pred_true_dict = {f"{model_name}_{o_bin:02.0f}": y_pred[:, y_pred.shape[1] - 1 - o]
+                                      for o, o_bin in enumerate(output_bins[::-1])}
+                    pred_true_dict.update({output_field: y_true, model_name: y_pred_linear})
+                    pred_true_df = pd.DataFrame(pred_true_dict,
+                                                index=best_track_meta[mode].index)
+                    pred_out = pd.merge(best_track_meta[mode], pred_true_df, left_index=True, right_index=True)
+                    pred_out.to_csv(join(out_path, f"{model_name}_{mode}_discrete_predictions.csv"))
     return
 
 

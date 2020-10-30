@@ -118,6 +118,7 @@ class BestTrackNetCDF(object):
             self.bt_ds = xr.concat(bt_ds_list, "run")
         self.bt_runs = None
         self.run_columns = ["DATE", "STNAM", "STNUM", "BASIN"]
+        self.meta_columns = ["TIME", "LON", "LAT", "STM_SPD", "STM_HDG", "LAND"]
         # Some of the variables have (time, nrun) as the dimensions, which causes problems when trying to use
         # the xarray.to_dataframe() function. Changing the dimension from nrun to run fixes the problem.
         for variable in self.bt_ds.variables.keys():
@@ -160,8 +161,10 @@ class BestTrackNetCDF(object):
 
     def to_dataframe(self, variables, dropna=True):
         variables_list = list(variables)
-        if "TIME" not in variables_list:
-            variables_list = ["TIME"] + variables_list
+        for m in self.meta_columns:
+            if m in variables_list:
+                variables_list.remove(m)
+        variables_list = self.meta_columns + variables_list
 
         bt_df = pd.merge(self.bt_runs, self.bt_ds[variables_list].to_dataframe(), how="right",
                             left_index=True, right_on="run", right_index=False)

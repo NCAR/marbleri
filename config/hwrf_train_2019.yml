@@ -1,23 +1,23 @@
 data_modes: ["train", "val", "test"]
 
 hwrf_data_paths:
-  train: "/glade/p/ral/nsap/rozoff/hfip/reforecast_h220_rotated/"
-  val: "/glade/p/ral/nsap/rozoff/hfip/reforecast_h220_rotated/"
-  test: "/glade/p/ral/nsap/rozoff/hfip/reforecast_h220_rotated/"
+  train: "/glade/p/ral/nsap/rozoff/hfip/reforecast_h218_rotated/"
+  val: "/glade/p/ral/nsap/rozoff/hfip/realtime2018_h218_rotated/"
+  test: "/glade/p/ral/nsap/rozoff/hfip/realtime2019_h218_rotated/"
 best_track_data_paths:
   train:
     file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
-    file_start: "diag2020"
+    file_start: "diag_2015_2017"
     start_date: "2015-01-01"
     end_date: "2017-12-31"
   val:
     file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
-    file_start: "diag2020"
+    file_start: "diag_2018"
     start_date: "2018-01-01"
     end_date: "2018-12-31"
   test:
     file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
-    file_start: "diag2020"
+    file_start: "diag_2019"
     start_date: "2019-01-01"
     end_date: "2019-12-31"
 time_difference_hours: 24
@@ -33,7 +33,7 @@ best_track_output: "vmax_bt_new"
 best_track_output_comparisons: ["VMAX"]
 best_track_scaler: "RobustScaler"
 output_bins: [-40, 40, 5]
-out_path: "/glade/scratch/dgagne/hwrf_2020_output/"
+out_path: "/glade/scratch/dgagne/hwrf_2019_output/"
 n_workers: 16
 models:
   random_forest_discrete:
