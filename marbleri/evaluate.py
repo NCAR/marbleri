@@ -52,7 +52,7 @@ def discrete_metrics(y_true_discrete, y_pred_discrete, y_bins, meta):
     all_scores = pd.DataFrame(0, index=subsets, columns=list(metric_set.keys()) + ["Count"])
     for metric, metric_fun in metric_set.items():
         all_scores.loc["all", metric] = metric_fun(y_true_discrete, y_pred_discrete, y_bins)
-        all_scores.loc["all", "Count"] = y_true_discrete.size
+        all_scores.loc["all", "Count"] = y_true_discrete.shape[0]
     for basin in basins:
         for forecast_hour in forecast_hours:
             subset = f"{basin}_f{forecast_hour:03d}"
@@ -104,7 +104,11 @@ def brier_score_threshold(y_true_discrete, y_pred_discrete, y_bins, threshold=0)
 def auc_threshold(y_true_discrete, y_pred_discrete, y_bins, threshold=0):
     y_pred_prob = exceedance_probability(y_pred_discrete, y_bins, threshold)
     y_true = exceedance_probability(y_true_discrete, y_bins, threshold)
-    return roc_auc_score(y_true, y_pred_prob)
+    if len(np.unique(y_true)) > 1:
+        score = roc_auc_score(y_true, y_pred_prob)
+    else:
+        score = np.nan
+    return score
 
 
 def expected_value(y_pred_discrete, y_bins):

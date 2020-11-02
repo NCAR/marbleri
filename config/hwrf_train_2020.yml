@@ -29,21 +29,21 @@ conv_inputs:
 best_track_inputs: ["RMW", "VMAX", "MIN_SLP", "SHR_MAG", "SST", "LAND", "TPW", "TANG850",
                     "VORT850", "DVRG200",
                     "STM_SPD", "RHLO", "RHMD", "RHHI", "INST1", "INST2"]
-best_track_output: "vmax_bt_new"
+best_track_output: "vmax_bt"
 best_track_output_comparisons: ["VMAX"]
-best_track_scaler: "RobustScaler"
+best_track_scaler: "StandardScaler"
 output_bins: [-40, 40, 5]
 out_path: "/glade/scratch/dgagne/hwrf_2020_output/"
 n_workers: 16
 models:
-  random_forest_discrete:
-    model_type: "RandomForestClassifier"
+  random_forest_linear:
+    model_type: "RandomForestRegressor"
     input_type: "scalar"
-    output_type: "discrete"
+    output_type: "linear"
     config:
       n_estimators: 100
-      criterion: "entropy"
       max_features: "sqrt"
+      max_depth: 10
       n_jobs: 16
   dense_neural_net_discrete:
     model_type: "DenseNeuralNet"
@@ -66,16 +66,16 @@ models:
       min_filters: 16
       min_data_width: 12
       pooling_width: 2
-      dense_neurons: 64
+      dense_neurons: 0
       output_type: "linear"
       loss: "mae"
-      pooling: "max"
+      pooling: "mean"
       data_format: "channels_last"
       l2_alpha: 0
       optimizer: "adam"
       batch_size: 256
       epochs: 20
-      learning_rate: 0.0001
+      learning_rate: 0.001
       verbose: 1
   resnet_linear:
     model_type: "ResNet"
@@ -85,16 +85,16 @@ models:
       min_filters: 16
       min_data_width: 12
       pooling_width: 2
-      dense_neurons: 64
+      dense_neurons: 0
       output_type: "linear"
       loss: "mae"
-      pooling: "max"
+      pooling: "mean"
       data_format: "channels_last"
       l2_alpha: 0
       optimizer: "adam"
       batch_size: 256
       epochs: 20
-      learning_rate: 0.0001
+      learning_rate: 0.001
       verbose: 1
   conv_discrete:
     model_type: "BaseConvNet"
@@ -104,7 +104,7 @@ models:
       min_filters: 16
       min_data_width: 12
       pooling_width: 2
-      dense_neurons: 64
+      dense_neurons: 0
       output_type: "discrete"
       loss: "categorical_crossentropy"
       pooling: "mean"
@@ -113,7 +113,7 @@ models:
       optimizer: "adam"
       batch_size: 256
       epochs: 20
-      learning_rate: 0.0001
+      learning_rate: 0.001
       verbose: 1
   conv_mixed:
     model_type: "MixedConvNet"
@@ -124,17 +124,17 @@ models:
       min_data_width: 12
       pooling_width: 2
       scalar_hidden_layers: 2
-      scalar_hidden_neurons: 128
-      dense_neurons: 64
+      scalar_hidden_neurons: 64
+      dense_neurons: 32
       output_type: "discrete"
       loss: "categorical_crossentropy"
-      pooling: "max"
+      pooling: "mean"
       data_format: "channels_last"
       l2_alpha: 0
       optimizer: "adam"
       batch_size: 256
-      epochs: 20
-      learning_rate: 0.0001
+      epochs: 30
+      learning_rate: 0.001
       verbose: 1
   resnet_discrete:
     model_type: "ResNet"
@@ -144,7 +144,7 @@ models:
       min_filters: 16
       min_data_width: 12
       pooling_width: 2
-      dense_neurons: 64
+      dense_neurons: 0
       output_type: "discrete"
       loss: "categorical_crossentropy"
       pooling: "mean"
@@ -153,6 +153,6 @@ models:
       optimizer: "adam"
       batch_size: 256
       epochs: 20
-      learning_rate: 0.0001
+      learning_rate: 0.001
       verbose: 1
 

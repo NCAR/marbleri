@@ -75,12 +75,16 @@ def main():
         print(hwrf_filenames_start[0], hwrf_filenames_end[0])
         hwrf_files_se = np.vstack([hwrf_filenames_start, hwrf_filenames_end]).T
         hwrf_field_data[mode] = load_hwrf_data_distributed(hwrf_files_se, input_var_levels, client, subset=conv_subset)
+        if np.any(np.isnan(hwrf_field_data[mode])):
+            print("nans:", np.where(np.isnan(hwrf_field_data[mode])))
         print("Normalize " + mode)
         hwrf_norm_data[mode], \
         conv_scale_values = normalize_hwrf_loaded_data(hwrf_field_data[mode],
                                                   input_var_levels,
                                                   scale_format=config["conv_inputs"]["scale_format"],
                                                   scale_values=conv_scale_values)
+        print(conv_scale_values)
+        print(hwrf_norm_data[mode].mean())
     if not exists(config["out_path"]):
         os.makedirs(config["out_path"])
     model_objects = {}
@@ -95,6 +99,8 @@ def main():
             else:
                 y_train = best_track_output_discrete["train"]
                 y_val = best_track_output_discrete["val"]
+            print(y_train)
+            print(model_config["input_type"])
             if model_config["input_type"] == "conv":
                 model_objects[model_name].fit(hwrf_norm_data["train"], y_train, val_x=hwrf_norm_data["val"],
                                               val_y=y_val)
@@ -107,7 +113,7 @@ def main():
                                                      hwrf_norm_data["val"]),
                                               val_y=y_val)
             print("Saving", model_name)
-            if model_config["model_type"] == "RandomForestClassifier":
+            if model_config["model_type"] == "RandomForestRegressor":
                 with open(join(out_path, model_name + ".pkl"), "wb") as out_pickle:
                     pickle.dump(model_objects[model_name], out_pickle)
             else:
@@ -116,14 +122,18 @@ def main():
                                            save_format="h5")
             for mode in data_modes:
                 if model_config["input_type"] == "scalar":
-                    y_pred = model_objects[model_name].predict(best_track_input_norm["train"].values)
+                    y_pred = model_objects[model_name].predict(best_track_input_norm[mode].values)
                 elif model_config["input_type"] == "mixed":
-                    y_pred = model_objects[model_name].predict((best_track_input_norm["train"].values,
-                                                                     hwrf_norm_data["train"]))
+                    y_pred = model_objects[model_name].predict((best_track_input_norm[mode].values,
+                                                                     hwrf_norm_data[mode]))
                 else:
-                    y_pred = model_objects[model_name].predict(hwrf_norm_data["train"])
+                    y_pred = model_objects[model_name].predict(hwrf_norm_data[mode])
                 if model_config["output_type"] == "linear":
                     y_true = best_track_df[mode][output_field].values
+                    y_pred = y_pred.ravel()
+                    print("y true shape", y_true.shape)
+                    print("y pred shape", y_pred.shape)
+                    print("y pred shape", y_pred.min(), y_pred.max())
                     model_scores = linear_metrics(y_true, y_pred, best_track_meta[mode])
                     print(f"{model_name} {mode} Linear Scores")
                     print(model_scores)
@@ -137,6 +147,9 @@ def main():
                     y_true = best_track_df[mode][output_field].values
                     y_true_discrete = best_track_output_discrete[mode]
                     y_pred_linear = expected_value(y_pred, output_bins)
+                    print("y true shape", y_true.shape)
+                    print("y pred shape", y_pred.shape)
+                    print("y pred linear shape", y_pred_linear.shape)
                     linear_model_scores = linear_metrics(y_true, y_pred_linear, best_track_meta[mode])
                     print(f"{model_name} {mode} Linear Scores")
                     print(linear_model_scores)

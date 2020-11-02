@@ -128,6 +128,7 @@ def load_data_diff(hwrf_file_list, input_var_levels=None, subset=None):
         step_end = HWRFStep(train_file[1])
         for v, var in enumerate(input_var_levels):
             data[t, :, :, v] = step_end.get_variable(var[0], level=var[1], subset=subset).values - step_start.get_variable(var[0], level=var[1], subset=subset).values
+            data[t, :, :, v] = np.where(np.isnan(data[t, :, :, v]), 0, data[t, :, :, v]) 
         step_end.close()
         step_start.close()
     return data

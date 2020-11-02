@@ -247,10 +247,7 @@ class BaseConvNet(object):
                 scn_model = LeakyReLU(self.leaky_alpha, name=f"dense_activation")(scn_model)
             else:
                 scn_model = Activation(self.hidden_activation, name=f"dense_activation")(scn_model)
-        if self.output_type == "linear":
-            scn_model = Dense(output_size, name="dense_output")(scn_model)
-            scn_model = Activation("linear", name="activation_output")(scn_model)
-        elif self.output_type == "discrete":
+        if self.output_type == "discrete":
             scn_model = Dense(output_size, name="dense_output")(scn_model)
             scn_model = Activation("softmax", name="activation_output")(scn_model)
         elif self.output_type == "gaussian":
@@ -258,6 +255,8 @@ class BaseConvNet(object):
         elif "mixture" in self.output_type:
             num_mixtures = int(self.output_type.split("_")[1])
             scn_model = GaussianMixtureOut(mixtures=num_mixtures)(scn_model)
+        else:
+            scn_model = Dense(output_size, name="dense_output")(scn_model)
         self.model_ = Model(conv_input_layer, scn_model)
         print(self.model_.summary())
 
@@ -429,17 +428,15 @@ class MixedConvNet(object):
                 scalar_model = Activation(self.hidden_activation, name=f"hidden_scalar_activation_{h:02d}")(scalar_model)
         scn_model = Concatenate()([scalar_model, scn_model])
         if self.dense_neurons > 0:
+            
+            if self.use_dropout:
+                scn_model = Dropout(self.dropout_alpha, name="dense_dropout")(scn_model)
             scn_model = Dense(self.dense_neurons, name="dense_hidden", kernel_regularizer=reg)(scn_model)
             if self.hidden_activation == "leaky":
                 scn_model = LeakyReLU(self.leaky_alpha, name=f"dense_activation")(scn_model)
             else:
                 scn_model = Activation(self.hidden_activation, name=f"dense_activation")(scn_model)
-        if self.use_dropout:
-            scn_model = Dropout(self.dropout_alpha, name="dense_dropout")(scn_model)
-        if self.output_type == "linear":
-            scn_model = Dense(output_size, name="dense_output")(scn_model)
-            scn_model = Activation("linear", name="activation_output")(scn_model)
-        elif self.output_type == "gaussian":
+        if self.output_type == "gaussian":
             scn_model = NormOut()(scn_model)
         elif self.output_type == "discrete":
             scn_model = Dense(output_size, name="dense_output")(scn_model)
@@ -447,6 +444,8 @@ class MixedConvNet(object):
         elif "mixture" in self.output_type:
             num_mixtures = int(self.output_type.split("_")[1])
             scn_model = GaussianMixtureOut(mixtures=num_mixtures)(scn_model)
+        else:    
+            scn_model = Dense(output_size, name="dense_output")(scn_model)
         self.model_ = Model([scalar_input_layer, conv_input_layer], scn_model)
         print(self.model_.summary())
 
@@ -599,6 +598,9 @@ class ResNet(BaseConvNet):
             res_model = Activation("linear", name="activation_output")(res_model)
         elif self.output_type == "gaussian":
             res_model = NormOut()(res_model)
+        elif self.output_type == "discrete":
+            res_model = Dense(output_size, name="dense_output")(res_model)
+            res_model = Activation("softmax", name="activation_output")(res_model)
         elif "mixture" in self.output_type:
             num_mixtures = int(self.output_type.split("_")[1])
             res_model = GaussianMixtureOut(mixtures=num_mixtures)(res_model)

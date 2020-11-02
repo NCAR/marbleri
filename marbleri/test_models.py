@@ -1,4 +1,4 @@
-from .models import MixedConvNet, crps_norm, ResNet, NormOut, BaseConvNet
+from marbleri.models import MixedConvNet, crps_norm, ResNet, NormOut, BaseConvNet
 import tensorflow.keras.backend as K
 import numpy as np
 import yaml
@@ -47,7 +47,7 @@ def test_BaseConvNet():
       """config:
             min_filters: 16
             pooling_width: 2
-            dense_neurons: 32
+            dense_neurons: 0
             min_data_width: 12
             output_type: "linear"
             loss: "mae"
@@ -77,7 +77,7 @@ def test_ResNet():
     num_examples = 16
     rn = ResNet(min_filters=16, filter_growth_rate=1.5, min_data_width=6, filter_width=3, epochs=1,
                 hidden_activation="leaky", data_format="channels_last", pooling_width=2,
-                output_type='linear', loss="mae", pooling="max", learning_rate=0.0001, verbose=1)
+                dense_neurons=0,output_type='linear', loss="mae", pooling="mean", learning_rate=0.0001, verbose=1)
     x_data = np.random.normal(size=[num_examples] + list(conv_input_shape))
     y_data = np.random.normal(size=num_examples)
     assert len(x_data.shape) == 4
@@ -96,3 +96,7 @@ def test_ResNet():
     rn2.model_.summary()
     return
 
+if __name__ == "__main__":
+    test_ResNet()
+    test_BaseConvNet()
+    test_MixedConvNet()
