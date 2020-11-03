@@ -11,7 +11,7 @@ import tensorflow_probability as tfp
 tfd = tfp.distributions
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LogisticRegression
-
+from scipy.special import lambertw
 
 class NormOut(Layer):
     def __init__(self, **kwargs):
@@ -46,6 +46,37 @@ class GaussianMixtureOut(Layer):
         return input_shape[0], self.mixtures * 3
 
 
+def get_focal_gamma(p):
+    y = ((1 - p) ** (1 - (1 - p) / (p * tf.math.log(p))) / (p * tf.math.log(p))) * tf.math.log(1 - p)
+    lw = tf.convert_to_tensor(lambertw(-y.numpy() + 1e-12, k=-1))
+    gamma = (1-p)/(p*tf.math.log(p)) + lw / tf.math.log(1 - p)
+    return gamma
+
+
+def focal_loss_discrete(y_true, y_pred):
+    """
+    Focal loss with prescribed gamma from https://arxiv.org/pdf/2002.09437.pdf
+
+    Args:
+        y_true:
+        y_pred:
+
+    Returns:
+
+    """
+    prob_label = tf.boolean_mask(y_pred, y_true)
+    gamma = tf.where(prob_label < 0.2, 5.0, 3.0)
+    loss = -1 * (1 - prob_label) ** gamma * tf.math.log(prob_label)
+    return tf.reduce_mean(loss)
+
+
+def rps_discrete(y_true, y_pred):
+    y_pred_cdf = tf.math.cumsum(y_pred, axis=-1)
+    y_true_cdf = tf.math.cumsum(y_true, axis=-1)
+    dof = float(y_pred_cdf.shape[-1] - 1)
+    rps = tf.reduce_mean(tf.reduce_sum((y_pred_cdf - y_true_cdf) ** 2, axis=-1)) / dof
+    return rps
+
 def crps_norm(y_true, y_pred, cdf_points=np.arange(-200, 200.0, 1.0)):
     cdf_points_tensor = K.constant(0.5 * (cdf_points[:-1] + cdf_points[1:]), dtype="float32")
     cdf_point_diffs = K.constant(cdf_points[1:] - cdf_points[:-1], dtype="float32")
@@ -74,7 +105,9 @@ losses = {"mse": mean_squared_error,
           "binary_crossentropy": binary_crossentropy,
           "categorical_crossentropy": categorical_crossentropy, 
           "crps_norm": crps_norm,
-          "crps_mixture": crps_mixture}
+          "crps_mixture": crps_mixture,
+          "focal": focal_loss_discrete,
+          "rps": rps_discrete}
 
 
 class DenseNeuralNet(object):
