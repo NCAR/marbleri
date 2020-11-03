@@ -11,4 +11,4 @@
 module load cuda/10.1
 export PATH="$HOME/miniconda3/envs/hfip/bin:$PATH"
 cd ~/marbleri/
-python -u train_hwrf_ml.py config/hwrf_train_2020.yml -t
+python -u train_hwrf_ml.py config/hwrf_train_2020_leaky.yml -t

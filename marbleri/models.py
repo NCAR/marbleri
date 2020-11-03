@@ -78,12 +78,12 @@ losses = {"mse": mean_squared_error,
 
 
 class DenseNeuralNet(object):
-    def __init__(self, hidden_layers=1, hidden_neurons=10, activation="relu", learning_rate=0.001,
+    def __init__(self, hidden_layers=1, hidden_neurons=10, hidden_activation="relu", learning_rate=0.001,
                  output_type="linear", optimizer="adam", dropout_alpha=0.0, batch_size=64, epochs=10,
                  verbose=0, metrics=None, leaky_alpha=0.1):
         self.hidden_layers = hidden_layers
         self.hidden_neurons = hidden_neurons
-        self.hidden_activation = activation
+        self.hidden_activation = hidden_activation
         self.learning_rate = learning_rate
         self.output_type = output_type
         self.num_mixtures = 1
