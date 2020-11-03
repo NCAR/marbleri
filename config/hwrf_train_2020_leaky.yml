@@ -1,0 +1,203 @@
+data_modes: ["train", "val", "test"]
+
+hwrf_data_paths:
+  train: "/glade/p/ral/nsap/rozoff/hfip/reforecast_h220_rotated/"
+  val: "/glade/p/ral/nsap/rozoff/hfip/reforecast_h220_rotated/"
+  test: "/glade/p/ral/nsap/rozoff/hfip/reforecast_h220_rotated/"
+best_track_data_paths:
+  train:
+    file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
+    file_start: "diag2020"
+    start_date: "2015-01-01"
+    end_date: "2018-12-31"
+  val:
+    file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
+    file_start: "diag2020"
+    start_date: "2019-01-01"
+    end_date: "2019-12-31"
+  test:
+    file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
+    file_start: "diag2020"
+    start_date: "2019-01-01"
+    end_date: "2019-12-31"
+time_difference_hours: 24
+conv_inputs:
+  variables: ["THETA_E", "U_RAD", "V_TAN"]
+  levels: [20000, 50000, 85000, "surface"]
+  scale_format: "standard"
+  subset: [15, 111]
+best_track_inputs: ["RMW", "VMAX", "MIN_SLP", "SHR_MAG", "SST", "LAND", "TPW", "TANG850",
+                    "VORT850", "DVRG200",
+                    "STM_SPD", "RHLO", "RHMD", "RHHI", "INST1", "INST2"]
+best_track_output: "vmax_bt"
+best_track_output_comparisons: ["VMAX"]
+best_track_scaler: "StandardScaler"
+output_bins: [-40, 40, 5]
+out_path: "/glade/scratch/dgagne/hwrf_2020_leaky_output/"
+n_workers: 16
+models:
+  random_forest_linear:
+    model_type: "RandomForestRegressor"
+    input_type: "scalar"
+    output_type: "linear"
+    config:
+      n_estimators: 100
+      max_features: "sqrt"
+      max_depth: 10
+      n_jobs: 16
+  dense_neural_net_discrete:
+    model_type: "DenseNeuralNet"
+    input_type: "scalar"
+    output_type: "discrete"
+    config:
+      hidden_layers: 2
+      hidden_neurons: 64
+      hidden_activation: "leaky"
+      output_type: "discrete"
+      batch_size: 256
+      epochs: 30
+      learning_rate: 0.001
+      verbose: 1
+  conv_linear:
+    model_type: "BaseConvNet"
+    input_type: "conv"
+    output_type: "linear"
+    config:
+      min_filters: 16
+      min_data_width: 12
+      pooling_width: 2
+      dense_neurons: 32
+      output_type: "linear"
+      loss: "mae"
+      pooling: "mean"
+      hidden_activation: "leaky"
+      data_format: "channels_last"
+      l2_alpha: 0
+      optimizer: "adam"
+      batch_size: 256
+      epochs: 20
+      learning_rate: 0.001
+      verbose: 1
+  resnet_linear:
+    model_type: "ResNet"
+    input_type: "conv"
+    output_type: "linear"
+    config:
+      min_filters: 16
+      min_data_width: 12
+      pooling_width: 2
+      dense_neurons: 32
+      output_type: "linear"
+      hidden_activation: "leaky"
+      loss: "mae"
+      pooling: "mean"
+      data_format: "channels_last"
+      l2_alpha: 0
+      optimizer: "adam"
+      batch_size: 256
+      epochs: 20
+      learning_rate: 0.001
+      verbose: 1
+  conv_discrete:
+    model_type: "BaseConvNet"
+    input_type: "conv"
+    output_type: "discrete"
+    config:
+      min_filters: 16
+      min_data_width: 12
+      pooling_width: 2
+      dense_neurons: 32
+      hidden_activation: "leaky"
+      output_type: "discrete"
+      loss: "categorical_crossentropy"
+      pooling: "mean"
+      data_format: "channels_last"
+      l2_alpha: 0
+      optimizer: "adam"
+      batch_size: 256
+      epochs: 30
+      learning_rate: 0.001
+      verbose: 1
+  conv_focal_discrete:
+    model_type: "BaseConvNet"
+    input_type: "conv"
+    output_type: "discrete"
+    config:
+      min_filters: 16
+      min_data_width: 12
+      pooling_width: 2
+      dense_neurons: 32
+      hidden_activation: "leaky"
+      output_type: "discrete"
+      loss: "focal"
+      pooling: "mean"
+      data_format: "channels_last"
+      l2_alpha: 0
+      optimizer: "adam"
+      batch_size: 256
+      epochs: 30
+      learning_rate: 0.001
+      verbose: 1
+  conv_rps_discrete:
+    model_type: "BaseConvNet"
+    input_type: "conv"
+    output_type: "discrete"
+    config:
+      min_filters: 16
+      min_data_width: 12
+      pooling_width: 2
+      dense_neurons: 32
+      hidden_activation: "leaky"
+      output_type: "discrete"
+      loss: "rps"
+      pooling: "mean"
+      data_format: "channels_last"
+      l2_alpha: 0
+      optimizer: "adam"
+      batch_size: 256
+      epochs: 30
+      learning_rate: 0.001
+      verbose: 1
+  conv_mixed:
+    model_type: "MixedConvNet"
+    input_type: "mixed"
+    output_type: "discrete"
+    config:
+      min_filters: 16
+      min_data_width: 12
+      pooling_width: 2
+      scalar_hidden_layers: 2
+      scalar_hidden_neurons: 64
+      dense_neurons: 32
+      hidden_activation: "leaky"
+      output_type: "discrete"
+      loss: "categorical_crossentropy"
+      pooling: "mean"
+      data_format: "channels_last"
+      l2_alpha: 0
+      optimizer: "adam"
+      batch_size: 256
+      epochs: 30
+      learning_rate: 0.001
+      verbose: 1
+  resnet_discrete:
+    model_type: "ResNet"
+    input_type: "conv"
+    output_type: "discrete"
+    config:
+      min_filters: 16
+      min_data_width: 12
+      pooling_width: 2
+      dense_neurons: 0
+      hidden_activation: "leaky"
+      output_type: "discrete"
+      loss: "categorical_crossentropy"
+      pooling: "mean"
+      data_format: "channels_last"
+      l2_alpha: 0
+      optimizer: "adam"
+      batch_size: 256
+      epochs: 20
+      learning_rate: 0.001
+      verbose: 1
+
