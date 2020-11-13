@@ -1,19 +1,17 @@
+import tensorflow as tf
 from tensorflow.keras.layers import Dense, Conv2D, Activation, Input, Flatten, AveragePooling2D, MaxPool2D, LeakyReLU, Dropout, Add
 from tensorflow.keras.layers import BatchNormalization, Concatenate, Layer, SpatialDropout2D
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam, SGD
-from tensorflow.keras.losses import mean_squared_error, mean_absolute_error
-from tensorflow.keras.utils import multi_gpu_model
+from tensorflow.keras.losses import binary_crossentropy, categorical_crossentropy, mean_squared_error, mean_absolute_error
 from tensorflow.keras.regularizers import l2
 import numpy as np
 import tensorflow.keras.backend as K
 import tensorflow_probability as tfp
 tfd = tfp.distributions
-try:
-    from horovod.keras import DistributedOptimizer
-except ImportError:
-    print("Horovod not available")
-import tensorflow as tf
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.linear_model import LogisticRegression
+from scipy.special import lambertw
 
 class NormOut(Layer):
     def __init__(self, **kwargs):
@@ -48,6 +46,37 @@ class GaussianMixtureOut(Layer):
         return input_shape[0], self.mixtures * 3
 
 
+def get_focal_gamma(p):
+    y = ((1 - p) ** (1 - (1 - p) / (p * tf.math.log(p))) / (p * tf.math.log(p))) * tf.math.log(1 - p)
+    lw = tf.convert_to_tensor(lambertw(-y.numpy() + 1e-12, k=-1))
+    gamma = (1-p)/(p*tf.math.log(p)) + lw / tf.math.log(1 - p)
+    return gamma
+
+
+def focal_loss_discrete(y_true, y_pred):
+    """
+    Focal loss with prescribed gamma from https://arxiv.org/pdf/2002.09437.pdf
+
+    Args:
+        y_true:
+        y_pred:
+
+    Returns:
+
+    """
+    prob_label = tf.boolean_mask(y_pred, y_true)
+    gamma = tf.where(prob_label < 0.2, 5.0, 3.0)
+    loss = -1 * (1 - prob_label) ** gamma * tf.math.log(prob_label)
+    return tf.reduce_mean(loss)
+
+
+def rps_discrete(y_true, y_pred):
+    y_pred_cdf = tf.math.cumsum(y_pred, axis=-1)
+    y_true_cdf = tf.math.cumsum(y_true, axis=-1)
+    dof = float(y_pred_cdf.shape[-1] - 1)
+    rps = tf.reduce_mean(tf.reduce_sum((y_pred_cdf - y_true_cdf) ** 2, axis=-1)) / dof
+    return rps
+
 def crps_norm(y_true, y_pred, cdf_points=np.arange(-200, 200.0, 1.0)):
     cdf_points_tensor = K.constant(0.5 * (cdf_points[:-1] + cdf_points[1:]), dtype="float32")
     cdf_point_diffs = K.constant(cdf_points[1:] - cdf_points[:-1], dtype="float32")
@@ -73,17 +102,21 @@ def crps_mixture(y_true, y_pred, cdf_points=np.arange(0, 200.0, 5.0)):
 
 losses = {"mse": mean_squared_error,
           "mae": mean_absolute_error,
+          "binary_crossentropy": binary_crossentropy,
+          "categorical_crossentropy": categorical_crossentropy, 
           "crps_norm": crps_norm,
-          "crps_mixture": crps_mixture}
+          "crps_mixture": crps_mixture,
+          "focal": focal_loss_discrete,
+          "rps": rps_discrete}
 
 
 class DenseNeuralNet(object):
-    def __init__(self, hidden_layers=1, hidden_neurons=10, activation="relu", learning_rate=0.001,
+    def __init__(self, hidden_layers=1, hidden_neurons=10, hidden_activation="relu", learning_rate=0.001,
                  output_type="linear", optimizer="adam", dropout_alpha=0.0, batch_size=64, epochs=10,
-                 verbose=0, metrics=None, leaky_alpha=0.1, distributed=False):
+                 verbose=0, metrics=None, leaky_alpha=0.1):
         self.hidden_layers = hidden_layers
         self.hidden_neurons = hidden_neurons
-        self.hidden_activation = activation
+        self.hidden_activation = hidden_activation
         self.learning_rate = learning_rate
         self.output_type = output_type
         self.num_mixtures = 1
@@ -92,8 +125,10 @@ class DenseNeuralNet(object):
         elif "mixture" in output_type:
             self.num_mixtures = int(output_type.split("_")[1])
             self.loss = losses["crps_mixture"]
+        elif "discrete" == output_type:
+            self.loss = losses["categorical_crossentropy"]
         else:
-            self.loss = losses["mse"]
+            self.loss = losses["mae"]
         self.dropout_alpha = dropout_alpha
         self.optimizer = optimizer
         self.epochs = epochs
@@ -104,9 +139,7 @@ class DenseNeuralNet(object):
         self.batch_size = batch_size
         self.verbose = verbose
         self.metrics = metrics
-        self.model = None
-        self.parallel_model = None
-        self.distributed = distributed
+        self.model_ = None
 
     def build_network(self, scalar_input_shape, output_size):
         ann_input = Input(shape=(scalar_input_shape,))
@@ -124,10 +157,13 @@ class DenseNeuralNet(object):
         elif self.output_type.split("_")[0] == "mixture":
             num_mixtures = int(self.output_type.split("_")[1])
             ann_model = GaussianMixtureOut(mixtures=num_mixtures)(ann_model)
+        elif self.output_type == "discrete":
+            ann_model = Dense(output_size, name="dense_output")(ann_model)
+            ann_model = Activation("softmax", name="activation_output")(ann_model)
         else:
             ann_model = Dense(output_size)(ann_model)
-        self.model = Model(ann_input, ann_model)
-        print(self.model.summary())
+        self.model_ = Model(ann_input, ann_model)
+        print(self.model_.summary())
         return
 
     def compile_model(self):
@@ -138,18 +174,7 @@ class DenseNeuralNet(object):
             opt = Adam(lr=self.learning_rate)
         else:
             opt = SGD(lr=self.learning_rate, momentum=0.99)
-        if self.distributed:
-            opt = DistributedOptimizer(opt)
-        self.model.compile(opt, self.loss, metrics=self.metrics)
-
-    def compile_parallel_model(self, num_gpus):
-        self.parallel_model = multi_gpu_model(self.model, num_gpus)
-        if self.optimizer == "adam":
-            opt = Adam(lr=self.learning_rate)
-        else:
-            opt = SGD(lr=self.learning_rate, momentum=0.99)
-
-        self.parallel_model.compile(opt, self.loss, metrics=self.metrics)
+        self.model_.compile(opt, self.loss, metrics=self.metrics)
 
     @staticmethod
     def get_data_shapes(x, y):
@@ -168,25 +193,28 @@ class DenseNeuralNet(object):
             val_data = None
         else:
             val_data = (val_x, val_y)
-        self.model.fit(x, y, batch_size=self.batch_size, epochs=self.epochs, verbose=self.verbose,
+        self.model_.fit(x, y, batch_size=self.batch_size, epochs=self.epochs, verbose=self.verbose,
                        validation_data=val_data,  **kwargs)
 
-    def predict(self, x, **kwargs):
-        return self.model.predict(x, **kwargs)
+    def predict(self, x, batch_size=None, **kwargs):
+        if batch_size is None:
+            batch_size = self.batch_size
+        return self.model_.predict(x, batch_size=batch_size, **kwargs)
 
 
 class BaseConvNet(object):
     def __init__(self, min_filters=16, filter_growth_rate=2, filter_width=5, min_data_width=4, pooling_width=2,
-                 hidden_activation="relu", output_type="linear",
-                 pooling="mean", use_dropout=False, dropout_alpha=0.0,
-                 data_format="channels_first", optimizer="adam", loss="mse", leaky_alpha=0.1, metrics=None,
-                 learning_rate=0.001, batch_size=1024, epochs=10, verbose=0, l2_alpha=0, distributed=False):
+                 dense_neurons=64, hidden_activation="relu", output_type="linear",
+                 pooling="mean", use_dropout=False, dropout_alpha=0.0, batch_norm=False,
+                 data_format="channels_last", optimizer="adam", loss="mse", leaky_alpha=0.1, metrics=None,
+                 learning_rate=0.001, batch_size=1024, epochs=10, verbose=0, l2_alpha=0):
         self.min_filters = min_filters
         self.filter_width = filter_width
         self.filter_growth_rate = filter_growth_rate
         self.pooling_width = pooling_width
         self.min_data_width = min_data_width
         self.hidden_activation = hidden_activation
+        self.dense_neurons = dense_neurons
         self.output_type = output_type
         self.use_dropout = use_dropout
         self.pooling = pooling
@@ -194,12 +222,13 @@ class BaseConvNet(object):
         self.data_format = data_format
         self.optimizer = optimizer
         self.learning_rate = learning_rate
+        self.batch_norm = batch_norm
         self.loss = loss
         self.metrics = metrics
         self.leaky_alpha = leaky_alpha
         self.batch_size = batch_size
         self.epochs = epochs
-        self.model = None
+        self.model_ = None
         self.parallel_model = None
         self.l2_alpha = l2_alpha
         if l2_alpha > 0:
@@ -207,7 +236,6 @@ class BaseConvNet(object):
         else:
             self.use_l2 = False
         self.verbose = verbose
-        self.distributed = distributed
 
     def build_network(self, conv_input_shape, output_size):
         """
@@ -217,7 +245,6 @@ class BaseConvNet(object):
             conv_input_shape (tuple of shape [variable, y, x]): The shape of the input data
             output_size: Number of neurons in output layer.
         """
-        print("Conv input shape", conv_input_shape)
         if self.use_l2:
             reg = l2(self.l2_alpha)
         else:
@@ -225,10 +252,11 @@ class BaseConvNet(object):
         conv_input_layer = Input(shape=conv_input_shape, name="conv_input")
         num_conv_layers = int(np.round((np.log(conv_input_shape[1]) - np.log(self.min_data_width))
                                        / np.log(self.pooling_width)))
-        print(num_conv_layers)
+        print("Conv Layers", num_conv_layers)
         num_filters = self.min_filters
         scn_model = conv_input_layer
         for c in range(num_conv_layers):
+            print(conv_input_shape[1] / (self.pooling_width ** c))
             scn_model = Conv2D(num_filters, (self.filter_width, self.filter_width),
                                data_format=self.data_format,
                                kernel_regularizer=reg, padding="same", name="conv_{0:02d}".format(c))(scn_model)
@@ -246,17 +274,24 @@ class BaseConvNet(object):
                 scn_model = AveragePooling2D(pool_size=(self.pooling_width, self.pooling_width),
                                              data_format=self.data_format, name="pooling_{0:02d}".format(c))(scn_model)
         scn_model = Flatten(name="flatten")(scn_model)
-
-        if self.output_type == "linear":
+        if self.dense_neurons > 0:
+            scn_model = Dense(self.dense_neurons, name="dense_hidden", kernel_regularizer=reg)(scn_model)
+            if self.hidden_activation == "leaky":
+                scn_model = LeakyReLU(self.leaky_alpha, name=f"dense_activation")(scn_model)
+            else:
+                scn_model = Activation(self.hidden_activation, name=f"dense_activation")(scn_model)
+        if self.output_type == "discrete":
             scn_model = Dense(output_size, name="dense_output")(scn_model)
-            scn_model = Activation("linear", name="activation_output")(scn_model)
+            scn_model = Activation("softmax", name="activation_output")(scn_model)
         elif self.output_type == "gaussian":
             scn_model = NormOut()(scn_model)
         elif "mixture" in self.output_type:
             num_mixtures = int(self.output_type.split("_")[1])
             scn_model = GaussianMixtureOut(mixtures=num_mixtures)(scn_model)
-        self.model = Model(conv_input_layer, scn_model)
-        print(self.model.summary())
+        else:
+            scn_model = Dense(output_size, name="dense_output")(scn_model)
+        self.model_ = Model(conv_input_layer, scn_model)
+        print(self.model_.summary())
 
     def compile_model(self):
         """
@@ -266,17 +301,7 @@ class BaseConvNet(object):
             opt = Adam(lr=self.learning_rate)
         else:
             opt = SGD(lr=self.learning_rate, momentum=0.99)
-        if self.distributed:
-            opt = DistributedOptimizer(opt)
-        self.model.compile(opt, losses[self.loss], metrics=self.metrics)
-
-    def compile_parallel_model(self, num_gpus):
-        self.parallel_model = multi_gpu_model(self.model, num_gpus)
-        if self.optimizer == "adam":
-            opt = Adam(lr=self.learning_rate)
-        else:
-            opt = SGD(lr=self.learning_rate, momentum=0.99)
-        self.parallel_model.compile(opt, losses[self.loss], metrics=self.metrics)
+        self.model_.compile(opt, losses[self.loss], metrics=self.metrics)
 
     @staticmethod
     def get_data_shapes(x, y):
@@ -312,23 +337,18 @@ class BaseConvNet(object):
             val_data = None
         else:
             val_data = (val_x, val_y)
-        self.model.fit(x, y, batch_size=self.batch_size, epochs=self.epochs, verbose=self.verbose,
+        self.model_.fit(x, y, batch_size=self.batch_size, epochs=self.epochs, verbose=self.verbose,
                        validation_data=val_data, **kwargs)
 
-    def fit_generator(self, generator, build=True, validation_generator=None, **kwargs):
-        if build:
-            x_conv_shape, y_size = self.get_generator_data_shapes(generator)
-            self.build_network(x_conv_shape, y_size)
-            self.compile_model()
-        self.model.fit_generator(generator, epochs=self.epochs, verbose=self.verbose,
-                                 validation_data=validation_generator, **kwargs)
+    def predict(self, x, batch_size=None):
+        if batch_size is None:
+            batch_size = self.batch_size
+        return self.model_.predict(x, batch_size=batch_size)
 
-    def predict(self, x, y):
-        return self.model.predict(x, y, batch_size=self.batch_size)
 
-class StandardConvNet(object):
+class MixedConvNet(object):
     """
-    Standard Convolutional Neural Network contains a series of convolution and pooling layers followed by one
+    Mixed image and scalar Convolutional Neural Network contains a series of convolution and pooling layers followed by one
     fully connected layer to a set of scalar outputs. The number of convolution filters is assumed to increase
     with depth.
 
@@ -343,7 +363,7 @@ class StandardConvNet(object):
         scalar_hidden_neurons (int): Number of neurons in each dense hidden layer.
         hidden_activation (str): The nonlinear activation function applied after each convolutional layer. If "leaky", a leaky ReLU with
             alpha=0.1 is used.
-        output_type (str): "linear" (deterministic), "gaussian" (mean and standard deviation), or "mixture_2"
+        output_type (str): "linear" (deterministic), "gaussian" (mean and standard deviation), "discrete", or "mixture_2"
             (gaussian mixture model with number of Gaussians as the part the underscore.
         pooling (str): If mean, then :class:`keras.layers.AveragePooling2D` is used for pooling. If max, then :class:`keras.layers.MaxPool2D` is used.
         use_dropout (bool): If True, then a :class:`keras.layers.Dropout` layer is inserted between the final convolution block
@@ -361,11 +381,11 @@ class StandardConvNet(object):
     """
 
     def __init__(self, min_filters=16, filter_growth_rate=2, filter_width=5, min_data_width=4, pooling_width=2,
-                 scalar_hidden_layers=1, scalar_hidden_neurons=30,
+                 scalar_hidden_layers=1, scalar_hidden_neurons=64, dense_neurons=64,
                  hidden_activation="relu", output_type="linear",
                  pooling="mean", use_dropout=False, dropout_alpha=0.0,
                  data_format="channels_first", optimizer="adam", loss="mse", leaky_alpha=0.1, metrics=None,
-                 learning_rate=0.001, batch_size=1024, epochs=10, verbose=0, l2_alpha=0, distributed=False):
+                 learning_rate=0.001, batch_size=1024, epochs=10, verbose=0, l2_alpha=0):
         self.min_filters = min_filters
         self.filter_width = filter_width
         self.filter_growth_rate = filter_growth_rate
@@ -373,6 +393,7 @@ class StandardConvNet(object):
         self.min_data_width = min_data_width
         self.scalar_hidden_layers = scalar_hidden_layers
         self.scalar_hidden_neurons = scalar_hidden_neurons
+        self.dense_neurons = dense_neurons
         self.hidden_activation = hidden_activation
         self.output_type = output_type
         self.use_dropout = use_dropout
@@ -386,16 +407,13 @@ class StandardConvNet(object):
         self.leaky_alpha = leaky_alpha
         self.batch_size = batch_size
         self.epochs = epochs
-        self.model = None
-        self.parallel_model = None
+        self.model_ = None
         self.l2_alpha = l2_alpha
         if l2_alpha > 0:
             self.use_l2 = True
         else:
             self.use_l2 = False
         self.verbose = verbose
-        self.distributed = distributed
-
 
     def build_network(self, scalar_input_shape, conv_input_shape, output_size):
         """
@@ -416,7 +434,6 @@ class StandardConvNet(object):
         conv_input_layer = Input(shape=conv_input_shape, name="conv_input")
         num_conv_layers = int(np.round((np.log(conv_input_shape[1]) - np.log(self.min_data_width))
                                        / np.log(self.pooling_width)))
-        print(num_conv_layers)
         num_filters = self.min_filters
         scn_model = conv_input_layer
         for c in range(num_conv_layers):
@@ -443,18 +460,27 @@ class StandardConvNet(object):
             else:
                 scalar_model = Activation(self.hidden_activation, name=f"hidden_scalar_activation_{h:02d}")(scalar_model)
         scn_model = Concatenate()([scalar_model, scn_model])
-        if self.use_dropout:
-            scn_model = Dropout(self.dropout_alpha, name="dense_dropout")(scn_model)
-        if self.output_type == "linear":
-            scn_model = Dense(output_size, name="dense_output")(scn_model)
-            scn_model = Activation("linear", name="activation_output")(scn_model)
-        elif self.output_type == "gaussian":
+        if self.dense_neurons > 0:
+            
+            if self.use_dropout:
+                scn_model = Dropout(self.dropout_alpha, name="dense_dropout")(scn_model)
+            scn_model = Dense(self.dense_neurons, name="dense_hidden", kernel_regularizer=reg)(scn_model)
+            if self.hidden_activation == "leaky":
+                scn_model = LeakyReLU(self.leaky_alpha, name=f"dense_activation")(scn_model)
+            else:
+                scn_model = Activation(self.hidden_activation, name=f"dense_activation")(scn_model)
+        if self.output_type == "gaussian":
             scn_model = NormOut()(scn_model)
+        elif self.output_type == "discrete":
+            scn_model = Dense(output_size, name="dense_output")(scn_model)
+            scn_model = Activation("softmax", name="activation_output")(scn_model)
         elif "mixture" in self.output_type:
             num_mixtures = int(self.output_type.split("_")[1])
             scn_model = GaussianMixtureOut(mixtures=num_mixtures)(scn_model)
-        self.model = Model([scalar_input_layer, conv_input_layer], scn_model)
-        print(self.model.summary())
+        else:    
+            scn_model = Dense(output_size, name="dense_output")(scn_model)
+        self.model_ = Model([scalar_input_layer, conv_input_layer], scn_model)
+        print(self.model_.summary())
 
     def compile_model(self):
         """
@@ -464,17 +490,7 @@ class StandardConvNet(object):
             opt = Adam(lr=self.learning_rate)
         else:
             opt = SGD(lr=self.learning_rate, momentum=0.99)
-        if self.distributed:
-            opt = DistributedOptimizer(opt)
-        self.model.compile(opt, losses[self.loss], metrics=self.metrics)
-
-    def compile_parallel_model(self, num_gpus):
-        self.parallel_model = multi_gpu_model(self.model, num_gpus)
-        if self.optimizer == "adam":
-            opt = Adam(lr=self.learning_rate)
-        else:
-            opt = SGD(lr=self.learning_rate, momentum=0.99)
-        self.parallel_model.compile(opt, losses[self.loss], metrics=self.metrics)
+        self.model_.compile(opt, losses[self.loss], metrics=self.metrics)
 
     @staticmethod
     def get_data_shapes(x, y):
@@ -482,7 +498,7 @@ class StandardConvNet(object):
         Extract the input and output data shapes in order to construct the neural network.
         """
         if len(x[1].shape) != 4:
-            raise ValueError("Input data does not have dimensions (examples, y, x, predictor)")
+            raise ValueError("Input data does not have dimensions (examples, south_north, west_east, predictor)")
         if len(y.shape) == 1:
             output_size = 1
         else:
@@ -501,6 +517,8 @@ class StandardConvNet(object):
     def fit(self, x, y, val_x=None, val_y=None, build=True, **kwargs):
         """
         Train the neural network.
+        x: list of tuple of (tabular, image) inputs
+        y: output. Can be either single value or discretized bins
         """
         if build:
             x_scalar_shape, x_conv_shape, y_size = self.get_data_shapes(x, y)
@@ -510,19 +528,24 @@ class StandardConvNet(object):
             val_data = None
         else:
             val_data = (val_x, val_y)
-        self.model.fit(x, y, batch_size=self.batch_size, epochs=self.epochs, verbose=self.verbose,
+        self.model_.fit(x, y, batch_size=self.batch_size, epochs=self.epochs, verbose=self.verbose,
                        validation_data=val_data, **kwargs)
 
-    def fit_generator(self, generator, build=True, validation_generator=None, **kwargs):
-        if build:
-            x_scalar_shape, x_conv_shape, y_size = self.get_generator_data_shapes(generator)
-            self.build_network(x_scalar_shape, x_conv_shape, y_size)
-            self.compile_model()
-        self.model.fit_generator(generator, epochs=self.epochs, verbose=self.verbose,
-                                 validation_data=validation_generator, **kwargs)
+    def predict(self, x, batch_size=None):
+        """
+        Predict the neural network output.
 
-    def predict(self, x, y):
-        return self.model.predict(x, y, batch_size=self.batch_size)
+        Args:
+            x: list of tuple of (tabular, image) inputs
+            batch_size: Batch size for predict function. Can be larger than fit.
+
+        Returns:
+
+        """
+
+        if batch_size is None:
+            batch_size = self.batch_size
+        return self.model_.predict(x, batch_size=batch_size)
 
 
 class ResNet(BaseConvNet):
@@ -533,16 +556,17 @@ class ResNet(BaseConvNet):
 
     def __init__(self, min_filters=16, filter_growth_rate=2, filter_width=5, min_data_width=4, pooling_width=2,
                  hidden_activation="relu", output_type="linear",
-                 pooling="mean", use_dropout=False, dropout_alpha=0.0,
-                 data_format="channels_first", optimizer="adam", loss="mse", leaky_alpha=0.1, metrics=None,
-                 learning_rate=0.001, batch_size=1024, epochs=10, l2_alpha=0, verbose=0, distributed=False, **kwargs):
+                 pooling="mean", use_dropout=False, dropout_alpha=0.0, dense_neurons=64,
+                 data_format="channels_last", optimizer="adam", loss="mse", leaky_alpha=0.1, metrics=None,
+                 learning_rate=0.001, batch_size=1024, epochs=10, l2_alpha=0, verbose=0, **kwargs):
         super().__init__(min_filters=min_filters, filter_growth_rate=filter_growth_rate, filter_width=filter_width,
                          min_data_width=min_data_width, pooling_width=pooling_width,
                          hidden_activation=hidden_activation, data_format=data_format,
                          output_type=output_type, pooling=pooling, use_dropout=use_dropout,
                          dropout_alpha=dropout_alpha, optimizer=optimizer, loss=loss, metrics=metrics,
-                         leaky_alpha=leaky_alpha,
-                         batch_size=batch_size, epochs=epochs, verbose=verbose, learning_rate=learning_rate, l2_alpha=l2_alpha)
+                         leaky_alpha=leaky_alpha, dense_neurons=dense_neurons,
+                         batch_size=batch_size, epochs=epochs,
+                         verbose=verbose, learning_rate=learning_rate, l2_alpha=l2_alpha, **kwargs)
 
     def residual_block(self, filters, in_layer, layer_number=0):
         """
@@ -577,6 +601,10 @@ class ResNet(BaseConvNet):
 
     def build_network(self, conv_input_shape, output_size):
         print(conv_input_shape)
+        if self.use_l2:
+            reg = l2(self.l2_alpha)
+        else:
+            reg = None
         conv_input_layer = Input(shape=conv_input_shape, name="conv_input")
         num_conv_layers = int(np.round((np.log(conv_input_shape[1]) - np.log(self.min_data_width))
                                        / np.log(self.pooling_width)))
@@ -590,6 +618,12 @@ class ResNet(BaseConvNet):
             else:
                 res_model = AveragePooling2D(data_format=self.data_format, name="pooling_{0:02d}".format(c))(res_model)
         res_model = Flatten(name="flatten")(res_model)
+        if self.dense_neurons > 0:
+            res_model = Dense(self.dense_neurons, name="dense_hidden", kernel_regularizer=reg)(res_model)
+            if self.hidden_activation == "leaky":
+                res_model = LeakyReLU(self.leaky_alpha, name=f"dense_activation")(res_model)
+            else:
+                res_model = Activation(self.hidden_activation, name=f"dense_activation")(res_model)
         if self.use_dropout:
             res_model = Dropout(self.dropout_alpha, name="dense_dropout")(res_model)
         if self.output_type == "linear":
@@ -597,7 +631,20 @@ class ResNet(BaseConvNet):
             res_model = Activation("linear", name="activation_output")(res_model)
         elif self.output_type == "gaussian":
             res_model = NormOut()(res_model)
+        elif self.output_type == "discrete":
+            res_model = Dense(output_size, name="dense_output")(res_model)
+            res_model = Activation("softmax", name="activation_output")(res_model)
         elif "mixture" in self.output_type:
             num_mixtures = int(self.output_type.split("_")[1])
             res_model = GaussianMixtureOut(mixtures=num_mixtures)(res_model)
-        self.model = Model(conv_input_layer, res_model)
+        self.model_ = Model(conv_input_layer, res_model)
+        print(self.model_.summary())
+
+
+all_models = {"BaseConvNet": BaseConvNet,
+              "MixedConvNet": MixedConvNet,
+              "ResNet": ResNet,
+              "RandomForestClassifier": RandomForestClassifier,
+              "RandomForestRegressor": RandomForestRegressor,
+              "DenseNeuralNet": DenseNeuralNet,
+              "LogisticRegression": LogisticRegression}

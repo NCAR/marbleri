@@ -1,11 +1,15 @@
 import numpy as np
 import pandas as pd
+from numba import njit
 from .nwp import HWRFStep
-from os.path import join, exists
+from os.path import join, exists, getsize
 import os
-from dask.distributed import as_completed
 import xarray as xr
-import logging
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+
+scaler_classes = {"StandardScaler": StandardScaler,
+                  "MinMaxScaler": MinMaxScaler,
+                  "RobustScaler": RobustScaler}
 
 
 def get_hwrf_filenames(best_track_df, hwrf_path, extension=".nc"):
@@ -32,92 +36,123 @@ def get_hwrf_filenames(best_track_df, hwrf_path, extension=".nc"):
     return np.array(hwrf_filenames)
 
 
-def process_all_hwrf_runs(hwrf_files, variable_levels, subset_indices, norm_values, global_norm, out_path,
-                          n_workers, dask_client):
+def get_hwrf_filenames_diff(best_track_df, hwrf_path, diff=24, extension=".nc"):
     """
-    Load each HWRF file in parallel, extract select variables, and normalize them based on the normalizing values
-    already calculated.
+    Assemble the HWRF file name pairs for creating time difference fields from the columns of the best track dataframe.
 
     Args:
-        hwrf_files:
-        variable_levels:
-        subset_indices:
-        norm_values:
-        global_norm:
-        out_path:
-        n_workers:
-        dask_client:
+        best_track_df: `pandas.DataFrame` containing information about each HWRF time step
+        hwrf_path: Path to HWRF files
+        extension: type of file containing hwrf data.
+    Returns:
+        hwrf_file_names_start: HWRF files at the beginning of the intensification period
+        hwrf_file_names_end: HWRF files at the end of the intensification period.
+    """
+    hwrf_filenames_start = []
+    hwrf_filenames_end = []
+    for i in range(best_track_df.shape[0]):
+        idx = best_track_df.index[i]
+        storm_name = best_track_df.loc[idx, "STNAM"]
+        storm_number = best_track_df.loc[idx, "STNUM"]
+        basin = best_track_df.loc[idx, "BASIN"]
+        run_date = best_track_df.loc[idx, "DATE"]
+        forecast_hour = int(best_track_df.loc[idx, "TIME"])
+        fh_start = forecast_hour - diff
+        hwrf_filename_start = join(hwrf_path,
+                             f"{storm_name}{storm_number}{basin}.{run_date}.f{fh_start:03d}" + extension)
+        hwrf_filename_end = join(hwrf_path,
+                             f"{storm_name}{storm_number}{basin}.{run_date}.f{forecast_hour:03d}" + extension)
+        hwrf_filenames_start.append(hwrf_filename_start)
+        hwrf_filenames_end.append(hwrf_filename_end)
+    return np.array(hwrf_filenames_start), np.array(hwrf_filenames_end)
+
+
+def get_var_levels(input_vars, pressure_levels):
+    """
+    For each input variable, create a list of input variable, pressure level combinations.
+
+    Args:
+        input_vars (list): List of input variables without the _L10* designation (e.g., THETA_E, U_TAN, V_RAD)
+        pressure_levels (list): List of integer pressure levels in Pa and surface if surface variable is included.
+
+    Returns:
+        input_var_levels
+    """
+    input_var_levels = []
+    for input_var in input_vars:
+        for pressure_level in pressure_levels:
+            if pressure_level == "surface":
+                input_var_levels.append((input_var + "_L103", None))
+            else:
+                input_var_levels.append((input_var + "_L100", pressure_level))
+    return input_var_levels
+
+
+def load_hwrf_data(hwrf_file_list, input_var_levels=None):
+    data = []
+    step_data = []
+    for t, train_file in enumerate(hwrf_file_list):
+        step = HWRFStep(train_file)
+        for var in input_var_levels:
+            step_data.append(step.get_variable(var[0], level=var[1]).values)
+        step.close()
+        del step
+        data.append(np.stack(step_data, axis=-1))
+        del step_data[:]
+    train_data = np.stack(data, axis=0)
+    return train_data
+
+
+def load_data_diff(hwrf_file_list, input_var_levels=None, subset=None):
+    """
+    Load HWRF netCDF files that contain the time differences between fields.
+
+    Args:
+        hwrf_file_list: List of HWRF file pairs to be loaded.
+        input_var_levels: List of input variables in (variable, level) format.
 
     Returns:
 
     """
-    futures = []
-    split_points = list(range(0, len(hwrf_files), len(hwrf_files) // (n_workers - 1))) + [len(hwrf_files)]
-    for s, split_point in enumerate(split_points[:-1]):
-        futures.append(dask_client.submit(process_hwrf_run_set, hwrf_files[split_point:split_points[s+1]],
-                                                           variable_levels, subset_indices, out_path,
-                                                           norm_values, global_norm))
-    dask_client.gather(futures)
-    del futures[:]
-    return
+    if subset is None:
+        subset = (0, 126)
+    subset_size = subset[1] - subset[0]
+    data = np.zeros((len(hwrf_file_list), subset_size, subset_size, len(input_var_levels)), dtype=np.float32)
+    for t, train_file in enumerate(hwrf_file_list):
+        if not (exists(train_file[0]) and exists(train_file[1])):
+            continue
+        if getsize(train_file[0]) == 0 or getsize(train_file[1]) == 0:
+            # Do not fill in data if either file contains no information
+            continue
+        step_start = HWRFStep(train_file[0])
+        step_end = HWRFStep(train_file[1])
+        for v, var in enumerate(input_var_levels):
+            data[t, :, :, v] = step_end.get_variable(var[0], level=var[1], subset=subset).values - step_start.get_variable(var[0], level=var[1], subset=subset).values
+            data[t, :, :, v] = np.where(np.isnan(data[t, :, :, v]), 0, data[t, :, :, v]) 
+        step_end.close()
+        step_start.close()
+    return data
 
 
-def process_hwrf_run_set(hwrf_files, variable_levels, subset_indices, out_path, norm_values,
-                         global_norm=False):
-    h_length = len(hwrf_files)
-    for h, hwrf_file in enumerate(hwrf_files):
-        if h % 10 == 0:
-            logging.info(f"HWRF Subprocess {h/h_length * 100:0.1f}% Complete")
-        process_hwrf_run(hwrf_file, variable_levels, subset_indices, out_path, norm_values,
-                         global_norm=global_norm)
-    return 0
-
-
-def process_hwrf_run(hwrf_filename, variable_levels, subset_indices,
-                     out_path, norm_values, global_norm=False):
+def load_hwrf_data_distributed(hwrf_file_list, input_var_levels, client, subset=None):
     """
-    Normalize the variables in a single HWRF file based on the norm_values and save another netCDF file.
+    Load data in parallel with dask.
 
     Args:
-        hwrf_filename: HWRF file being normalized
-        variable_levels: List of tuples containing the variable and pressure level
-        subset_indices: grid index values marking the start and end indices of the domain being saved
-        out_path: Path where normalized netCDF files are saved
-        norm_values: if global norm, then pandas dataframe with means and sds. Otherwise is a data array with that info
-        global_norm: Whether a global or local norm is being used
+        hwrf_file_list: List of hwrf filename pairs
+        input_var_levels:
+        client: Dask distributed client
 
     Returns:
 
     """
-    hwrf_data = HWRFStep(hwrf_filename)
-    subset_start = subset_indices[0]
-    subset_end = subset_indices[1]
-    subset_width = subset_end - subset_start
-    all_norm_values = np.zeros((len(variable_levels), subset_width, subset_width), dtype=np.float32)
-    var_level_str = get_var_level_strings(variable_levels)
-    lon = xr.DataArray(hwrf_data.ds["lon_0"][slice(subset_start, subset_end)].values, dims=("x",))
-    lat = xr.DataArray(hwrf_data.ds["lat_0"][slice(subset_end, subset_start, -1)].values, dims=("y",))
-    for v, var_level in enumerate(variable_levels):
-        var_values = hwrf_data.get_variable(*var_level, subset=subset_indices).values
-        if global_norm:
-            var_norm_values = (var_values - norm_values.iloc[v, 4]) / norm_values.iloc[v, 5]
-        else:
-            var_norm_values = (var_values - norm_values[v, :, :, 4]) / norm_values[v, :, :, 5]
-        if np.count_nonzero(np.isnan(var_values)) > 0:
-            var_norm_values[np.isnan(var_values)] = 0
-        all_norm_values[v] = var_norm_values
-    ds = xr.DataArray(all_norm_values, dims=("variable", "y", "x"), coords={"variable": var_level_str,
-                                                                                "y": np.arange(subset_width),
-                                                                                "x": np.arange(subset_width),
-                                                                                "lon": lon,
-                                                                                "lat": lat},
-                      name="hwrf_norm")
-    ds.to_netcdf(join(out_path, hwrf_filename.split("/")[-1]),
-                 encoding={"hwrf_norm": {"zlib": True, "complevel": 1, "least_significant_digit": 3},
-                           "lon": {"zlib": True, "complevel": 1, "least_significant_digit": 3},
-                           "lat": {"zlib": True, "complevel": 1, "least_significant_digit": 3}}
-                 )
-    return ds
+    n_workers = len(client.cluster.workers)
+    slice_indices = np.linspace(0, len(hwrf_file_list), n_workers + 1).astype(int)
+    hwrf_subsets = [hwrf_file_list[slice_index:slice_indices[s + 1]]
+                    for s, slice_index in enumerate(slice_indices[:-1])]
+    out = client.map(load_data_diff, hwrf_subsets, input_var_levels=input_var_levels, subset=subset)
+    all_data = np.vstack(client.gather(out))
+    return all_data
 
 
 def coarsen_hwrf_runs(hwrf_files, variable_levels, window_size, subset_indices, out_path,
@@ -274,140 +309,62 @@ def get_var_level_strings(variable_levels):
             var_level_str.append(var_level[0] + "_surface")
     return var_level_str
 
+@njit(parallel=True)
+def par_mean(x):
+    return np.mean(x)
 
-def calculate_hwrf_local_norms(hwrf_files, variable_levels, subset_indices, out_path, dask_client, n_workers):
-    subset_size = subset_indices[1] - subset_indices[0]
-    hwrf_futures = []
-    var_level_str = get_var_level_strings(variable_levels)
-    df_columns = ["sum", "sum_count", "sum_squared_diff", "sum_squared_diff_count", "mean", "standard_dev"]
-    local_stats = np.zeros((len(variable_levels), subset_size, subset_size, 6), dtype=np.float32)
-    split_points = list(range(0, len(hwrf_files), len(hwrf_files) // (n_workers - 1))) + [len(hwrf_files)]
-    for s, split_point in enumerate(split_points[:-1]):
-        hwrf_futures.append(dask_client.submit(hwrf_set_local_sums, hwrf_files[split_point:split_points[s+1]],
-                                               variable_levels, subset_indices))
-    local_stats[:, :, :, 0:2] = np.sum(dask_client.gather(hwrf_futures), axis=0)
-    del hwrf_futures[:]
-    local_stats[:, :, :, 4] = local_stats[:, :, :, 0] / local_stats[:, :, :, 1]
-    local_mean = dask_client.scatter(local_stats[:, :, :, 4])
-    local_stat_data = xr.DataArray(local_stats, dims=("variable", "lat", "lon", "statistic"),
-                 coords={"variable": var_level_str, "lat": np.arange(subset_size),
-                         "lon": np.arange(subset_size), "statistic": df_columns}, name="local_norm_stats")
-    local_stat_data.to_netcdf(join(out_path, "hwrf_local_norm_stats.nc"),
-                              encoding={"local_norm_stats": {"zlib": True, "complevel": 3}})
-    for s, split_point in enumerate(split_points[:-1]):
-        hwrf_futures.append(dask_client.submit(hwrf_set_local_variances, hwrf_files[split_point:split_points[s+1]],
-                                               variable_levels, local_mean, subset_indices))
-    local_stats[:, :, :, 2:4] = np.sum(dask_client.gather(hwrf_futures), axis=0)
-    local_stats[:, :, :, 5] = np.sqrt(local_stats[:, :, :, 2] / (local_stats[:, :, :, 3] - 1.0))
-    local_stat_data = xr.DataArray(local_stats, dims=("variable", "lat", "lon", "statistic"),
-                 coords={"variable": var_level_str, "lat": np.arange(subset_size),
-                         "lon": np.arange(subset_size), "statistic": df_columns}, name="local_norm_stats")
-    local_stat_data.to_netcdf(join(out_path, "hwrf_local_norm_stats.nc"),
-                              encoding={"local_norm_stats": {"zlib": True, "complevel": 3}})
-    return local_stat_data
+@njit(parallel=True)
+def par_std(x):
+    return np.std(x)
 
+@njit(parallel=True)
+def par_norm_scale(x, mean_val, sd_val):
+    return (x - mean_val) / sd_val
 
-def hwrf_set_local_sums(hwrf_files, variable_levels, subset_indices):
-    subset_size = subset_indices[1] - subset_indices[0]
-    sum_counts = np.zeros((len(variable_levels), subset_size, subset_size, 2), dtype=np.float32)
-    num_hwrf_files = len(hwrf_files)
-    for h, hwrf_file in enumerate(hwrf_files):
-        if h % 5 == 0:
-            logging.info(f"Mean {h * 100 / num_hwrf_files:0.2f}%, {hwrf_file}")
-        sum_counts += hwrf_step_local_sums(hwrf_file, variable_levels, subset_indices)
-    return sum_counts
+@njit(parallel=True)
+def par_minmax_scale(x, min_val, max_val):
+    r_val = 1.0 / (max_val - min_val)
+    return (x - min_val) * r_val
 
-
-def hwrf_step_local_sums(hwrf_filename, variable_levels, subset_indices):
-    subset_size = subset_indices[1] - subset_indices[0]
-    sum_counts = np.zeros((len(variable_levels), subset_size, subset_size, 2), dtype=np.float32)
-    hwrf_data = HWRFStep(hwrf_filename)
-    for v, var_level in enumerate(variable_levels):
-        var_data = hwrf_data.get_variable(var_level[0], var_level[1], subset=subset_indices).values
-        var_data[var_data > 1e7] = np.nan
-        sum_counts[v, :, :, 0] = np.where(~np.isnan(var_data), var_data, 0)
-        sum_counts[v, :, :, 1] = np.where(~np.isnan(var_data), 1, 0)
-    hwrf_data.close()
-    return sum_counts
+def normalize_hwrf_loaded_data(hwrf_field_data, var_levels, scale_format="standard", scale_values=None):
+    hwrf_norm_data = np.zeros(hwrf_field_data.shape, dtype=hwrf_field_data.dtype)
+    var_level_str = get_var_level_strings(var_levels)
+    if scale_format == "standard":
+        scale_columns = ("mean", "sd")
+    else:
+        scale_columns = ("min", "max")
+    if scale_values is None:
+        scale_values = pd.DataFrame(0, index=var_level_str, columns=scale_columns,
+                                    dtype=hwrf_field_data.dtype)
+        if scale_format == "standard":
+            for v in range(len(var_level_str)):
+                scale_values.loc[var_level_str[v], "mean"] = par_mean(hwrf_field_data[..., v])
+                scale_values.loc[var_level_str[v], "sd"] = par_std(hwrf_field_data[..., v])
+        else:
+            for v in range(len(var_levels)):
+                scale_values.loc[var_level_str[v], "min"] = hwrf_field_data[..., v].min()
+                scale_values.loc[var_level_str[v], "max"] = hwrf_field_data[..., v].max()
+    if scale_format == "standard":
+        for v in range(len(var_levels)):
+            hwrf_norm_data[..., v] = par_norm_scale(hwrf_field_data[..., v], scale_values.loc[var_level_str[v], "mean"],  scale_values.loc[var_level_str[v], "sd"])
+    else:
+        for v in range(len(var_levels)):
+            hwrf_norm_data[..., v] = par_minmax_scale(hwrf_field_data[..., v], scale_values.loc[var_level_str[v], "min"], scale_values.loc[var_level_str[v], "max"])
+    return hwrf_norm_data, scale_values
 
 
-def hwrf_set_local_variances(hwrf_files, variable_levels, variable_means, subset_indices):
-    subset_size = subset_indices[1] - subset_indices[0]
-    sum_counts = np.zeros((len(variable_levels), subset_size, subset_size, 2), dtype=np.float32)
-    num_hwrf_files = len(hwrf_files)
-    for h, hwrf_file in enumerate(hwrf_files):
-        if h % 5 == 0:
-            logging.info(f"Var {h * 100 / num_hwrf_files:0.2f}%, {hwrf_file}")
-        sum_counts += hwrf_step_local_variances(hwrf_file, variable_levels, variable_means, subset_indices)
-    return sum_counts 
-
-
-def hwrf_step_local_variances(hwrf_filename, variable_levels, variable_means, subset_indices):
-    subset_size = subset_indices[1] - subset_indices[0]
-    hwrf_data = HWRFStep(hwrf_filename)
-    sum_counts = np.zeros((len(variable_levels), subset_size, subset_size, 2), dtype=np.float32)
-    for v, var_level in enumerate(variable_levels):
-        var_data = hwrf_data.get_variable(var_level[0], var_level[1], subset=subset_indices).values
-        var_data[var_data > 1e7] = np.nan
-        sum_counts[v, :, :, 0] = np.where(~np.isnan(var_data), (var_data - variable_means[v]) ** 2, 0)
-        sum_counts[v, :, :, 1] = np.where(~np.isnan(var_data), 1, 0)
-    hwrf_data.close()
-    return sum_counts
-
-
-def calculate_hwrf_global_norms(hwrf_files, variable_levels, out_path, dask_client):
+def discretize_output(y, y_bins):
     """
-    Calculate the mean and variance for each HWRF input variable across all valid pixel values.
+    Convert continuous values to discrete bins where 1 is marked if the example falls in that bin and 0 otherwise.
 
     Args:
-        hwrf_files: List of HWRF files to be processed
-        variable_levels: List of variable, level tuples (None for level if surface variable)
-        out_path: Path where global norm statistics are saved
-        dask_client: dask distributed Client object for parallel processing.
+        y: array of output values
+        y_bins: left side of output bins.
 
     Returns:
-
+        y_disc: binary array marking bin for each example.
     """
-    hwrf_futures = []
-    global_stats = np.zeros((len(variable_levels), 6))
-    for hwrf_filename in hwrf_files:
-        hwrf_futures.append(dask_client.submit(hwrf_step_global_sums, hwrf_filename, variable_levels))
-    for hwrf_future in as_completed(hwrf_futures):
-        global_stats[:, 0:2] += hwrf_future.result()
-    del hwrf_futures[:]
-    global_stats[:, 4] = global_stats[:, 0] / global_stats[:, 1]
-    for hwrf_filename in hwrf_files:
-        hwrf_futures.append(dask_client.submit(hwrf_step_global_variances, hwrf_filename,
-                                               variable_levels, global_stats[:, 4]))
-    for hwrf_future in as_completed(hwrf_futures):
-        global_stats[:, 2:4] += hwrf_future.result()
-    del hwrf_futures[:]
-    global_stats[:, 5] = np.sqrt(global_stats[:, 2] / (global_stats[:, 3] - 1.0))
-    var_level_str = get_var_level_strings(variable_levels)
-    df_columns = ["sum", "sum_count", "sum_squared_diff", "sum_squared_diff_count", "mean", "standard_dev"]
-    global_stats_df = pd.DataFrame(global_stats, index=var_level_str, columns=df_columns)
-    global_stats_df.to_csv(join(out_path, "hwrf_global_norm_stats.csv"), index_label="variable_level")
-    return global_stats_df
-
-
-def hwrf_step_global_sums(hwrf_filename, variable_levels):
-    hwrf_data = HWRFStep(hwrf_filename)
-    sum_counts = np.zeros((len(variable_levels), 2))
-    for v, var_level in enumerate(variable_levels):
-        sum_counts[v, 0] = np.nansum(hwrf_data.get_variable(var_level[0], var_level[1]))
-        sum_counts[v, 1] = np.count_nonzero(~np.isnan(hwrf_data.get_variable(var_level[0], var_level[1])))
-    hwrf_data.close()
-    return sum_counts
-
-
-def hwrf_step_global_variances(hwrf_filename, variable_levels, variable_means):
-    hwrf_data = HWRFStep(hwrf_filename)
-    sum_counts = np.zeros((len(variable_levels), 2))
-    for v, var_level in enumerate(variable_levels):
-        sum_counts[v, 0] = np.nansum((hwrf_data.get_variable(var_level[0], var_level[1]) - variable_means[v]) ** 2)
-        sum_counts[v, 1] = np.count_nonzero(~np.isnan(hwrf_data.get_variable(var_level[0], var_level[1])))
-    hwrf_data.close()
-    return sum_counts
-
-
-
+    y_disc = np.zeros((y.shape[0], y_bins.size), dtype=np.float32)
+    bin_index = np.maximum(np.searchsorted(y_bins, y) - 1, 0)
+    y_disc[np.arange(y.shape[0]), bin_index] = 1
+    return y_disc

@@ -1,0 +1,21 @@
+name: marbleri
+channels:
+  - conda-forge
+dependencies:
+  - python=3.7
+  - numpy=1.18.*
+  - scipy
+  - matplotlib
+  - xarray
+  - netcdf4
+  - dask
+  - pandas
+  - scikit-learn
+  - pyyaml
+  - pytest
+  - distributed
+  - pip
+  - pyproj
+  - pip:
+      - tensorflow
+      - tensorflow-probability
