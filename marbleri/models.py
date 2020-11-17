@@ -128,7 +128,7 @@ class DenseNeuralNet(object):
         elif "discrete" == output_type:
             self.loss = losses["categorical_crossentropy"]
         else:
-            self.loss = losses["mae"]
+            self.loss = losses["mse"]
         self.dropout_alpha = dropout_alpha
         self.optimizer = optimizer
         self.epochs = epochs
@@ -612,6 +612,8 @@ class ResNet(BaseConvNet):
         res_model = conv_input_layer
         for c in range(num_conv_layers):
             res_model = self.residual_block(num_filters, res_model, c)
+            if self.use_dropout:
+                res_model = SpatialDropout2D(rate=self.dropout_alpha)(res_model)
             num_filters = int(num_filters * self.filter_growth_rate)
             if self.pooling.lower() == "max":
                 res_model = MaxPool2D(data_format=self.data_format, name="pooling_{0:02d}".format(c))(res_model)

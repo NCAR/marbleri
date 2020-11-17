@@ -8,6 +8,7 @@ from marbleri.models import all_models
 from marbleri.evaluate import linear_metrics, discrete_metrics, expected_value
 from marbleri.nwp import BestTrackNetCDF
 from dask.distributed import Client, LocalCluster
+from marbleri.data import output_preds_adeck
 import numpy as np
 import pandas as pd
 import os
@@ -168,6 +169,14 @@ def main():
                                                 index=best_track_meta[mode].index)
                     pred_out = pd.merge(best_track_meta[mode], pred_true_df, left_index=True, right_index=True)
                     pred_out.to_csv(join(out_path, f"{model_name}_{mode}_discrete_predictions.csv"))
+                if "adeck_name" not in model_config.keys():
+                    adeck_name = "M" + "".join([x[0] for x in model_name.split("_")]).upper()
+                else:
+                    adeck_name = model_config["adeck_name"]
+                adeck_out_dir = join(out_path, "adeck_" + model_name, mode)
+                if not exists(adeck_out_dir):
+                    os.makedirs(adeck_out_dir)
+                output_preds_adeck(pred_out, best_track_df[mode], model_name, adeck_name, adeck_out_dir)
     return
 
 
