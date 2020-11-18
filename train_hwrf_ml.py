@@ -173,10 +173,11 @@ def main():
                     adeck_name = "M" + "".join([x[0] for x in model_name.split("_")]).upper()
                 else:
                     adeck_name = model_config["adeck_name"]
-                adeck_out_dir = join(out_path, "adeck_" + model_name, mode)
-                if not exists(adeck_out_dir):
-                    os.makedirs(adeck_out_dir)
-                output_preds_adeck(pred_out, best_track_df[mode], model_name, adeck_name, adeck_out_dir)
+                if mode != "train":
+                    adeck_out_dir = join(out_path, "adeck_" + model_name, mode)
+                    if not exists(adeck_out_dir):
+                        os.makedirs(adeck_out_dir)
+                    output_preds_adeck(pred_out, best_track_df[mode], model_name, adeck_name, adeck_out_dir)
     return
 
 

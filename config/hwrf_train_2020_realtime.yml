@@ -12,7 +12,7 @@ best_track_data_paths:
     end_date: "2018-12-31"
   val:
     file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
-    file_start: "diag2020_ref"
+    file_start: "diag_2020_ref"
     start_date: "2019-01-01"
     end_date: "2019-12-31"
   test:
@@ -54,8 +54,8 @@ models:
     config:
       hidden_layers: 2
       hidden_neurons: 64
-      activation: "relu"
-      output_type: "discrete"
+      hidden_activation: "relu"
+      output_type: "linear"
       batch_size: 128
       epochs: 20
       learning_rate: 0.0001
@@ -68,7 +68,7 @@ models:
     config:
       hidden_layers: 2
       hidden_neurons: 64
-      activation: "relu"
+      hidden_activation: "relu"
       output_type: "discrete"
       batch_size: 128
       epochs: 30

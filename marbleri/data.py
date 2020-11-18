@@ -1,6 +1,6 @@
 import numpy as np
-from os.path import join
-
+from os.path import join, exists
+from os import makedirs
 
 def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_path, delimiter=","):
     """
@@ -96,7 +96,11 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                 "s": "SH",
                 "b": "IO",
                 "a": "IO"}
-    basin_num_year = best_track_df["BASIN"] + best_track_df["STNUM"] + best_track_df["DATE"].str[:4]
+    if not exists(out_path):
+        makedirs(out_path)
+    stnum_str = best_track_df["STNUM"].astype(str).str.zfill(2)
+    date_str = best_track_df["DATE"].astype(str).str[:4]
+    basin_num_year = best_track_df["BASIN"] + stnum_str + date_str
     storms = np.unique(basin_num_year)
     for storm in storms:
         adeck_storm_id = storm.replace(storm[0], basin_id[storm[0]])
@@ -104,16 +108,16 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
         storm_idxs = basin_num_year == storm
         pred_storm = pred_df.loc[storm_idxs]
         bt_storm = best_track_df.loc[storm_idxs]
-        vmax_curr = bt_storm.iloc[0]["VMAX"] - bt_storm.iloc[0]["VMAX_dt_24"]
+        vmax_curr = int(bt_storm.iloc[0]["VMAX"] - bt_storm.iloc[0]["VMAX_dt_24"])
         with open(join(out_path, adeck_storm_id + ".dat"), "w") as adeck_file:
-            for i in range(len(pred_storm.shape[0])):
+            for i in range(pred_storm.shape[0]):
                 out_list = []
                 #BASIN
                 out_list.append(basin_id[bt_storm.iloc[i]["BASIN"]])
                 # CY
-                out_list.append(bt_storm.iloc[i]["STNUM"])
+                out_list.append(str(bt_storm.iloc[i]["STNUM"]).zfill(2))
                 # YYYYMMDDHH
-                out_list.append(bt_storm.iloc[i]["DATE"])
+                out_list.append(str(bt_storm.iloc[i]["DATE"]))
                 # "TECHNUM/MIN"
                 out_list.append("03")
                 # "TECH"
@@ -121,20 +125,20 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                 # "TAU"
                 out_list.append("{0:3d}".format(bt_storm.iloc[i]["TIME"]))
                 # "LatN/S"
-                lat_10 = round(bt_storm.iloc[i]["LAT"] * 10)
+                lat_10 = int(round(bt_storm.iloc[i]["LAT"] * 10))
                 lat_dir = "N" if lat_10 >= 0 else "S"
                 out_list.append(f"{lat_10:3d}{lat_dir}")
                 # LonE/W
                 lon = bt_storm.iloc[i]["LON"]
                 lon = lon + 360 if lon < 0 else lon
-                lon_10 = round(lon * 10)
+                lon_10 = int(round(lon * 10))
                 lon_dir = "W" if lon >= 180 else "E"
                 out_list.append(f"{lon_10:4d}{lon_dir}")
                 # VMAX
                 if i == 0:
-                    vmax_curr += round(pred_storm.iloc[i][model_name])
+                    vmax_curr += int(round(pred_storm.iloc[i][model_name]))
                 else:
-                    vmax_curr += round(pred_df.iloc[i][model_name] * 3 / 24)
+                    vmax_curr += int(round(pred_df.iloc[i][model_name] * 3 / 24))
                 out_list.append(f"{vmax_curr:3d}")
                 # MSLP
                 out_list.append("    ")
@@ -156,10 +160,10 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                 # INITIALS
                 out_list.append("DJG")
                 # DIR
-                dir = round(bt_storm.iloc[i]["STM_HDG"])
+                dir = int(round(bt_storm.iloc[i]["STM_HDG"]))
                 out_list.append(f"{dir:3d}")
                 # SPEED
-                speed = round(bt_storm.iloc[i]["STM_SPD"])
+                speed = int(round(bt_storm.iloc[i]["STM_SPD"]))
                 out_list.append(f"{speed:3d}")
                 # STORMNAME
                 s_name = bt_storm.iloc[i]["STNAM"].upper()
@@ -171,14 +175,14 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                 # SEASCODE
                 out_list.append("   ")
                 # SEAS1 to SEAS4
-                out_list.append(["    "] * 4)
+                out_list.extend(["    "] * 4)
                 # VMAX DT
                 out_list.append("VMAX_DT_24")
-                pred_val = round(pred_storm.iloc[i][model_name])
+                pred_val = int(round(pred_storm.iloc[i][model_name]))
                 out_list.append(f"{pred_val:3d}")
                 if model_name + "_30" in pred_storm.columns:
                     ri_cols = [f"{model_name}_{x:02d}" for x in [30, 35, 40]]
-                    ri_prob = round(pred_storm.iloc[i][ri_cols].values.sum() * 100)
+                    ri_prob = int(round(pred_storm.iloc[i][ri_cols].values.sum() * 100))
                     out_list.append("P(dV/dt>30kt)")
                     out_list.append(f"{ri_prob:3d}")
                 out_str = delimiter.join(out_list) + "\n"
