@@ -113,22 +113,14 @@ losses = {"mse": mean_squared_error,
 class DenseNeuralNet(object):
     def __init__(self, hidden_layers=1, hidden_neurons=10, hidden_activation="relu", learning_rate=0.001,
                  output_type="linear", optimizer="adam", dropout_alpha=0.0, batch_size=64, epochs=10,
-                 verbose=0, metrics=None, leaky_alpha=0.1):
+                 verbose=0, metrics=None, leaky_alpha=0.1, loss="mse", num_mixtures=1):
         self.hidden_layers = hidden_layers
         self.hidden_neurons = hidden_neurons
         self.hidden_activation = hidden_activation
         self.learning_rate = learning_rate
         self.output_type = output_type
-        self.num_mixtures = 1
-        if output_type == "gaussian":
-            self.loss = losses["crps_norm"]
-        elif "mixture" in output_type:
-            self.num_mixtures = int(output_type.split("_")[1])
-            self.loss = losses["crps_mixture"]
-        elif "discrete" == output_type:
-            self.loss = losses["categorical_crossentropy"]
-        else:
-            self.loss = losses["mse"]
+        self.num_mixtures = num_mixtures
+        self.loss = losses[loss]
         self.dropout_alpha = dropout_alpha
         self.optimizer = optimizer
         self.epochs = epochs
