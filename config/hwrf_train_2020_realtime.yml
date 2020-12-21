@@ -33,24 +33,24 @@ best_track_output: "vmax_bt"
 best_track_output_comparisons: ["VMAX"]
 best_track_scaler: "StandardScaler"
 output_bins: [-40, 40, 5]
-out_path: "/glade/scratch/dgagne/hwrf_2020_rt_output/"
+out_path: "/glade/work/dgagne/hwrf_2020_rt_output_20201221/"
 n_workers: 16
 models:
   random_forest_linear:
     model_type: "RandomForestRegressor"
     input_type: "scalar"
     output_type: "linear"
-    adeck_name: "MBRF"
+    adeck_name: "MRFL"
     config:
       n_estimators: 100
       max_features: "sqrt"
       max_depth: 10
       n_jobs: 16
-  dense_neural_linear:
+  dense_base_linear:
     model_type: "DenseNeuralNet"
     input_type: "scalar"
     output_type: "linear"
-    adeck_name: "MDNL"
+    adeck_name: "MDBL"
     config:
       hidden_layers: 2
       hidden_neurons: 64
@@ -60,25 +60,41 @@ models:
       epochs: 20
       learning_rate: 0.0001
       verbose: 1
-  dense_neural_discrete:
+  dense_base_discrete:
     model_type: "DenseNeuralNet"
     input_type: "scalar"
     output_type: "discrete"
-    adeck_name: "MDND"
+    adeck_name: "MDBD"
     config:
       hidden_layers: 2
       hidden_neurons: 64
       hidden_activation: "relu"
       output_type: "discrete"
+      loss: "categorical_crossentropy"
       batch_size: 128
-      epochs: 30
+      epochs: 20
+      learning_rate: 0.0001
+      verbose: 1
+  dense_focal_discrete:
+    model_type: "DenseNeuralNet"
+    input_type: "scalar"
+    output_type: "discrete"
+    adeck_name: "MDFD"
+    config:
+      hidden_layers: 2
+      hidden_neurons: 64
+      hidden_activation: "relu"
+      output_type: "discrete"
+      loss: "focal"
+      batch_size: 128
+      epochs: 20
       learning_rate: 0.0001
       verbose: 1
   conv_base_linear:
     model_type: "BaseConvNet"
     input_type: "conv"
     output_type: "linear"
-    adeck_name: "MCNL"
+    adeck_name: "MCBL"
     config:
       min_filters: 16
       min_data_width: 12
@@ -100,7 +116,7 @@ models:
     model_type: "ResNet"
     input_type: "conv"
     output_type: "linear"
-    adeck_name: "MRNL"
+    adeck_name: "MRBL"
     config:
       min_filters: 16
       min_data_width: 12
@@ -122,7 +138,7 @@ models:
     model_type: "BaseConvNet"
     input_type: "conv"
     output_type: "discrete"
-    adeck_name: "MCND"
+    adeck_name: "MCBD"
     config:
       min_filters: 16
       min_data_width: 12
@@ -144,7 +160,7 @@ models:
     model_type: "BaseConvNet"
     input_type: "conv"
     output_type: "discrete"
-    adeck_name: "MCNF"
+    adeck_name: "MCFD"
     config:
       min_filters: 16
       min_data_width: 12
@@ -167,7 +183,7 @@ models:
       model_type: "BaseConvNet"
       input_type: "conv"
       output_type: "discrete"
-      adeck_name: "MCNR"
+      adeck_name: "MCRD"
       config:
         min_filters: 16
         min_data_width: 12
@@ -190,7 +206,7 @@ models:
     model_type: "MixedConvNet"
     input_type: "mixed"
     output_type: "discrete"
-    adeck_name: "MCNM"
+    adeck_name: "MCMD"
     config:
       min_filters: 16
       min_data_width: 12
@@ -214,7 +230,7 @@ models:
     model_type: "ResNet"
     input_type: "conv"
     output_type: "discrete"
-    adeck_name: "MRND"
+    adeck_name: "MRBD"
     config:
       min_filters: 16
       min_data_width: 12
@@ -236,7 +252,7 @@ models:
     model_type: "ResNet"
     input_type: "conv"
     output_type: "discrete"
-    adeck_name: "MRNF"
+    adeck_name: "MRFD"
     config:
       min_filters: 16
       min_data_width: 12

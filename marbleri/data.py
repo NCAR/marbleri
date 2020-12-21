@@ -2,7 +2,7 @@ import numpy as np
 from os.path import join, exists
 from os import makedirs
 
-def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_path, delimiter=","):
+def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_path, delimiter=", "):
     """
     Output ML predictions to ATCF best track format. Format definition at
     https://www.nrlmry.navy.mil/atcf_web/docs/database/new/abdeck.txt.
@@ -52,41 +52,7 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                     "SEAS2",
                     "SEAS3",
                     "SEAS4"]
-    adeck_chars = [2,
-                  2,
-                  10,
-                  2,
-                  4,
-                  3,
-                  4,
-                  5,
-                  3,
-                  4,
-                  2,
-                  3,
-                  3,
-                  4,
-                  4,
-                  4,
-                  4,
-                  4,
-                  4,
-                  3,
-                  3,
-                  3,
-                  3,
-                  3,
-                  3,
-                  3,
-                  3,
-                  10,
-                  1,
-                  2,
-                  3,
-                  4,
-                  4,
-                  4,
-                  4]
+
     # convert best track basins to ADECK basins
     basin_id = {"l": "AL",
                 "e": "EP",
@@ -143,7 +109,7 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                 # MSLP
                 out_list.append("    ")
                 # TY
-                out_list.append("XXX")
+                out_list.append("XX")
                 # RAD
                 out_list.append("   ")
                 # WINDCODE
@@ -154,7 +120,7 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                 out_list.extend(["   "] * 3)
                 # SUBREGION
                 basin_i = bt_storm.iloc[i]["BASIN"].upper()
-                out_list.append(f"{basin_i:3s}")
+                out_list.append(f"{basin_i:>3s}")
                 # MAXSEAS
                 out_list.append("   ")
                 # INITIALS
@@ -167,7 +133,7 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                 out_list.append(f"{speed:3d}")
                 # STORMNAME
                 s_name = bt_storm.iloc[i]["STNAM"].upper()
-                out_list.append(f"{s_name:10s}")
+                out_list.append(f"{s_name:>10s}")
                 # DEPTH
                 out_list.append("X")
                 # SEAS
