@@ -93,13 +93,12 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                 # "LatN/S"
                 lat_10 = int(round(bt_storm.iloc[i]["LAT"] * 10))
                 lat_dir = "N" if lat_10 >= 0 else "S"
-                out_list.append(f"{lat_10:3d}{lat_dir}")
+                out_list.append(f"{lat_10:>4d}{lat_dir}")
                 # LonE/W
                 lon = bt_storm.iloc[i]["LON"]
-                lon = lon + 360 if lon < 0 else lon
                 lon_10 = int(round(lon * 10))
-                lon_dir = "W" if lon >= 180 else "E"
-                out_list.append(f"{lon_10:4d}{lon_dir}")
+                lon_dir = "W" if lon < 0 else "E"
+                out_list.append(f"{abs(lon_10):>5d}{lon_dir}")
                 # VMAX
                 if i == 0:
                     vmax_curr += int(round(pred_storm.iloc[i][model_name]))
