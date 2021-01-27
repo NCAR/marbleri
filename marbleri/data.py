@@ -72,9 +72,10 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
         adeck_storm_id = storm.replace(storm[0], basin_id[storm[0]])
         print(adeck_storm_id)
         storm_idxs = basin_num_year == storm
-        pred_storm = pred_df.loc[storm_idxs]
-        bt_storm = best_track_df.loc[storm_idxs]
+        pred_storm = pred_df.loc[storm_idxs.values]
+        bt_storm = best_track_df.loc[storm_idxs.values]
         vmax_curr = int(bt_storm.iloc[0]["VMAX"] - bt_storm.iloc[0]["VMAX_dt_24"])
+        curr_date = "1500010100"
         with open(join(out_path, adeck_storm_id + ".dat"), "w") as adeck_file:
             for i in range(pred_storm.shape[0]):
                 out_list = []
@@ -93,14 +94,17 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                 # "LatN/S"
                 lat_10 = int(round(bt_storm.iloc[i]["LAT"] * 10))
                 lat_dir = "N" if lat_10 >= 0 else "S"
-                out_list.append(f"{lat_10:>4d}{lat_dir}")
+                out_list.append(f"{abs(lat_10):>3d}{lat_dir}")
                 # LonE/W
                 lon = bt_storm.iloc[i]["LON"]
+                lon = lon - 360 if lon > 180 else lon
                 lon_10 = int(round(lon * 10))
                 lon_dir = "W" if lon < 0 else "E"
-                out_list.append(f"{abs(lon_10):>5d}{lon_dir}")
+                out_list.append(f"{abs(lon_10):>4d}{lon_dir}")
                 # VMAX
-                if i == 0:
+                if curr_date != bt_storm.iloc[i]["DATE"]:
+                    vmax_curr = int(bt_storm.iloc[i]["VMAX"] - bt_storm.iloc[i]["VMAX_dt_24"])
+                    curr_date = bt_storm.iloc[i]["DATE"]
                     vmax_curr += int(round(pred_storm.iloc[i][model_name]))
                 else:
                     vmax_curr += int(round(pred_df.iloc[i][model_name] * 3 / 24))

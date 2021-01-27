@@ -17,6 +17,7 @@ dependencies:
   - pip
   - pyproj
   - jupyter
+  - jupyterlab
   - pip:
       - tensorflow
       - tensorflow-probability
