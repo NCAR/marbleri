@@ -85,9 +85,10 @@ def main():
                                                   scale_format=config["conv_inputs"]["scale_format"],
                                                   scale_values=conv_scale_values)
         print(conv_scale_values)
-        print(hwrf_norm_data[mode].mean())
     if not exists(config["out_path"]):
         os.makedirs(config["out_path"])
+    if conv_scale_values is not None:
+        conv_scale_values.to_csv(join(out_path, "hwrf_conv_scale_values.csv"))
     model_objects = {}
     if args.train:
         print("Begin training")

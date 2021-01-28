@@ -27,7 +27,7 @@ conv_inputs:
   scale_format: "standard"
   subset: [15, 111]
 best_track_inputs: ["RMW", "VMAX", "MIN_SLP", "SHR_MAG", "SST", "LAND", "TPW", "TANG850",
-                    "VORT850", "DVRG200",
+                    "VORT850", "DVRG200", "TIME",
                     "STM_SPD", "RHLO", "RHMD", "RHHI", "INST1", "INST2"]
 best_track_output: "vmax_bt"
 best_track_output_comparisons: ["VMAX"]
