@@ -47,7 +47,7 @@ def test_output_preds_adeck():
     best_track_nc.calc_time_differences(["VMAX", "vmax_bt"], 24)
     best_track_sim = best_track_nc.to_dataframe(["VMAX_dt_24", "vmax_bt_dt_24"]).iloc[:200]
     print(best_track_sim.shape)
-    pred_sim = pd.DataFrame({model_name: np.random.normal(scale=20, size=best_track_sim.shape[0]),
+    pred_sim = pd.DataFrame({model_name: np.zeros(best_track_sim.shape[0]),
                             model_name + "_30": np.zeros(best_track_sim.shape[0]),
                             model_name + "_35": np.zeros(best_track_sim.shape[0]),
                             model_name + "_40": np.ones(best_track_sim.shape[0]),
