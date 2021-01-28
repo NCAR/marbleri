@@ -39,7 +39,9 @@ def main():
     best_track_nc = {}
     best_track_df = {}
     dt = config["time_difference_hours"]
-    best_track_inputs_dt = [f"{bt}_dt_{dt:d}" for bt in config["best_track_inputs"]]
+    best_track_inputs_static = config["best_track_inputs_static"]
+    best_track_inputs_dt = [f"{bt}_dt_{dt:d}" for bt in config["best_track_inputs_dt"]]
+    best_track_inputs_ml = best_track_inputs_static + best_track_inputs_dt
     best_track_input_norm = {}
     input_var_levels = get_var_levels(config["conv_inputs"]["variables"], config["conv_inputs"]["levels"])
     output_field = config["best_track_output"] + f"_dt_{dt:d}"
@@ -57,17 +59,18 @@ def main():
     for mode in data_modes:
         print("Loading " + mode)
         best_track_nc[mode] = BestTrackNetCDF(**config["best_track_data_paths"][mode])
-        best_track_nc[mode].calc_time_differences(config["best_track_inputs"], config["time_difference_hours"])
+        best_track_nc[mode].calc_time_differences(config["best_track_dt_inputs"], config["time_difference_hours"])
         best_track_nc[mode].calc_time_differences([config["best_track_output"]], config["time_difference_hours"])
-        best_track_df[mode] = best_track_nc[mode].to_dataframe(best_track_inputs_dt + [output_field])
+        best_track_df[mode] = best_track_nc[mode].to_dataframe(best_track_inputs_static +
+                                                               best_track_inputs_dt + [output_field])
         all_meta_columns = best_track_nc[mode].run_columns + best_track_nc[mode].meta_columns
         best_track_meta[mode] = best_track_df[mode][all_meta_columns]
         if mode == "train":
             best_track_input_norm[mode] = pd.DataFrame(best_track_scaler.fit_transform(
-                best_track_df[mode][best_track_inputs_dt]), columns=best_track_inputs_dt)
+                best_track_df[mode][best_track_inputs_ml]), columns=best_track_inputs_ml)
         else:
             best_track_input_norm[mode] = pd.DataFrame(best_track_scaler.transform(
-                best_track_df[mode][best_track_inputs_dt]), columns=best_track_inputs_dt)
+                best_track_df[mode][best_track_inputs_ml]), columns=best_track_inputs_ml)
         best_track_output_discrete[mode] = discretize_output(best_track_df[mode][output_field].values, output_bins)
         print(best_track_df[mode])
         hwrf_filenames_start, hwrf_filenames_end = get_hwrf_filenames_diff(best_track_df[mode],
@@ -85,9 +88,12 @@ def main():
                                                   scale_format=config["conv_inputs"]["scale_format"],
                                                   scale_values=conv_scale_values)
         print(conv_scale_values)
-        print(hwrf_norm_data[mode].mean())
-    if not exists(config["out_path"]):
-        os.makedirs(config["out_path"])
+    if not exists(out_path):
+        os.makedirs(out_path)
+    if conv_scale_values is not None:
+        conv_scale_values.to_csv(join(out_path, "hwrf_conv_scale_values.csv"))
+    with open(join(out_path, "best_track_scaler.pkl"), "wb") as scaler_pickle:
+        pickle.dump(best_track_scaler, scaler_pickle)
     model_objects = {}
     if args.train:
         print("Begin training")
@@ -132,9 +138,6 @@ def main():
                 if model_config["output_type"] == "linear":
                     y_true = best_track_df[mode][output_field].values
                     y_pred = y_pred.ravel()
-                    print("y true shape", y_true.shape)
-                    print("y pred shape", y_pred.shape)
-                    print("y pred shape", y_pred.min(), y_pred.max())
                     model_scores = linear_metrics(y_true, y_pred, best_track_meta[mode])
                     print(f"{model_name} {mode} Linear Scores")
                     print(model_scores)
@@ -148,9 +151,6 @@ def main():
                     y_true = best_track_df[mode][output_field].values
                     y_true_discrete = best_track_output_discrete[mode]
                     y_pred_linear = expected_value(y_pred, output_bins)
-                    print("y true shape", y_true.shape)
-                    print("y pred shape", y_pred.shape)
-                    print("y pred linear shape", y_pred_linear.shape)
                     linear_model_scores = linear_metrics(y_true, y_pred_linear, best_track_meta[mode])
                     print(f"{model_name} {mode} Linear Scores")
                     print(linear_model_scores)

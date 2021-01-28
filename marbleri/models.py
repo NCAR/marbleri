@@ -13,6 +13,7 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LogisticRegression
 from scipy.special import lambertw
 
+
 class NormOut(Layer):
     def __init__(self, **kwargs):
         self.mean_dense = Dense(1, **kwargs)

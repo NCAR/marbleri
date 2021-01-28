@@ -26,14 +26,14 @@ conv_inputs:
   levels: [20000, 50000, 85000, "surface"]
   scale_format: "standard"
   subset: [15, 111]
-best_track_inputs: ["RMW", "VMAX", "MIN_SLP", "SHR_MAG", "SST", "LAND", "TPW", "TANG850",
-                    "VORT850", "DVRG200",
-                    "STM_SPD", "RHLO", "RHMD", "RHHI", "INST1", "INST2"]
+best_track_inputs_static: ["LAND", "TIME"]
+best_track_inputs_dt: ["RMW", "VMAX", "MIN_SLP", "SHR_MAG", "SST", "LAND", "TPW", "TANG850",
+                    "VORT850", "DVRG200", "STM_SPD", "RHLO", "RHMD", "RHHI", "INST1", "INST2"]
 best_track_output: "vmax_bt"
 best_track_output_comparisons: ["VMAX"]
 best_track_scaler: "StandardScaler"
 output_bins: [-40, 40, 5]
-out_path: "/glade/work/dgagne/hwrf_2020_rt_output_20201221/"
+out_path: "/glade/scratch/dgagne/hwrf_2020_rt_output_20210128/"
 n_workers: 16
 models:
   random_forest_linear:

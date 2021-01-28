@@ -14,7 +14,16 @@ requires = ["numpy>=1.14",
             "xarray",
             "netcdf4",
             "scikit-learn>=0.2",
-            "tensorflow>=2.0"]
+            "tensorflow>=2.0",
+            "tensorflow-probability",
+            "numba",
+            "jupyter",
+            "jupyterlab",
+            "dask",
+            "distributed",
+            "pyyaml",
+            "pytest",
+            "sphinx"]
 
 if __name__ == "__main__":
     setup(name="marbleri",

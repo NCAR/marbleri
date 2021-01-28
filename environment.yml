@@ -18,6 +18,8 @@ dependencies:
   - pyproj
   - jupyter
   - jupyterlab
+  - numba
+  - sphinx
   - pip:
       - tensorflow
       - tensorflow-probability
