@@ -59,7 +59,7 @@ def main():
     for mode in data_modes:
         print("Loading " + mode)
         best_track_nc[mode] = BestTrackNetCDF(**config["best_track_data_paths"][mode])
-        best_track_nc[mode].calc_time_differences(config["best_track_dt_inputs"], config["time_difference_hours"])
+        best_track_nc[mode].calc_time_differences(config["best_track_inputs_dt"], config["time_difference_hours"])
         best_track_nc[mode].calc_time_differences([config["best_track_output"]], config["time_difference_hours"])
         best_track_df[mode] = best_track_nc[mode].to_dataframe(best_track_inputs_static +
                                                                best_track_inputs_dt + [output_field])

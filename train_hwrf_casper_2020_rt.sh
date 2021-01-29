@@ -12,4 +12,3 @@ module load cuda/10.1
 export PATH="$HOME/miniconda3/envs/marbleri/bin:$PATH"
 cd ~/marbleri/
 python -u train_hwrf_ml.py config/hwrf_train_2020_realtime.yml -t
-scontrol show job $SLURM_JOBID
