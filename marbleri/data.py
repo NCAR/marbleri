@@ -2,7 +2,9 @@ import numpy as np
 from os.path import join, exists
 from os import makedirs
 
-def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_path, delimiter=", "):
+
+def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_path, delimiter=", ",
+                       time_difference_hours=24):
     """
     Output ML predictions to ATCF best track format. Format definition at
     https://www.nrlmry.navy.mil/atcf_web/docs/database/new/abdeck.txt.
@@ -10,9 +12,15 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
     https://www.nrlmry.navy.mil/atcf_web/docs/database/new/database.html.
 
     Args:
-        pred_df:
-        best_track_df:
-        out_path:
+        pred_df: pandas DataFrame containing predictions from machine learning models. Should have same number of
+            rows as best_track_df.
+        best_track_df: pandas DataFrame containing best track diagnostic information.
+        model_name: Model to output to the ADECK file.
+        model_tech_code: 4-letter abbreviation for model that goes in ADECK file.
+        out_path: directory to output ADECK file.
+        delimiter: delimiter to use in file.
+        time_difference_hours: For dvmax/dt to vmax conversion, the time difference period for the intensification
+            predictions.
 
     Returns:
 
@@ -62,6 +70,7 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                 "s": "SH",
                 "b": "IO",
                 "a": "IO"}
+    hwrf_time_step_hours = 3
     if not exists(out_path):
         makedirs(out_path)
     stnum_str = best_track_df["STNUM"].astype(str).str.zfill(2)
@@ -74,7 +83,7 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
         storm_idxs = basin_num_year == storm
         pred_storm = pred_df.loc[storm_idxs.values]
         bt_storm = best_track_df.loc[storm_idxs.values]
-        vmax_curr = int(bt_storm.iloc[0]["VMAX"] - bt_storm.iloc[0]["VMAX_dt_24"])
+        vmax_curr = int(bt_storm.iloc[0]["VMAX"] - bt_storm.iloc[0][f"VMAX_dt_{time_difference_hours:02d}"])
         curr_date = "1500010100"
         with open(join(out_path, adeck_storm_id + ".dat"), "w") as adeck_file:
             for i in range(pred_storm.shape[0]):
@@ -107,7 +116,7 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                     curr_date = bt_storm.iloc[i]["DATE"]
                     vmax_curr += int(round(pred_storm.iloc[i][model_name]))
                 else:
-                    vmax_curr += int(round(pred_df.iloc[i][model_name] * 3 / 24))
+                    vmax_curr += int(round(pred_df.iloc[i][model_name] * hwrf_time_step_hours / time_difference_hours))
                 out_list.append(f"{vmax_curr:3d}")
                 # MSLP
                 out_list.append("    ")
