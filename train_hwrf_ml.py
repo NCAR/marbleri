@@ -40,11 +40,11 @@ def main():
     best_track_df = {}
     dt = config["time_difference_hours"]
     best_track_inputs_static = config["best_track_inputs_static"]
-    best_track_inputs_dt = [f"{bt}_dt_{dt:d}" for bt in config["best_track_inputs_dt"]]
+    best_track_inputs_dt = [f"{bt}_dt_{dt:02d}" for bt in config["best_track_inputs_dt"]]
     best_track_inputs_ml = best_track_inputs_static + best_track_inputs_dt
     best_track_input_norm = {}
     input_var_levels = get_var_levels(config["conv_inputs"]["variables"], config["conv_inputs"]["levels"])
-    output_field = config["best_track_output"] + f"_dt_{dt:d}"
+    output_field = config["best_track_output"] + f"_dt_{dt:02d}"
     hwrf_field_data = {}
     hwrf_norm_data = {}
     output_bins = np.arange(config["output_bins"][0],
@@ -177,7 +177,8 @@ def main():
                     adeck_out_dir = join(out_path, "adeck_" + model_name, mode)
                     if not exists(adeck_out_dir):
                         os.makedirs(adeck_out_dir)
-                    output_preds_adeck(pred_out, best_track_df[mode], model_name, adeck_name, adeck_out_dir)
+                    output_preds_adeck(pred_out, best_track_df[mode], model_name, adeck_name, adeck_out_dir,
+                                       time_difference_hours=config["time_difference_hours"])
     return
 
 

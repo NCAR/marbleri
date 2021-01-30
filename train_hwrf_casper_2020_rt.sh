@@ -8,7 +8,8 @@
 #SBATCH --gres=gpu:v100:1
 #SBATCH --mem=200G
 #SBATCH --output=hwrf_train.%j.out
-module load cuda/10.1
+module load cuda/11 cudnn nccl
 export PATH="$HOME/miniconda3/envs/marbleri/bin:$PATH"
 cd ~/marbleri/
-python -u train_hwrf_ml.py config/hwrf_train_2020_realtime.yml -t
+#python -u train_hwrf_ml.py config/hwrf_train_2020_realtime.yml -t
+python -u train_hwrf_ml.py config/hwrf_train_2020_realtime_3h.yml -t
