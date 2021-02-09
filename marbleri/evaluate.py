@@ -112,6 +112,9 @@ def auc_threshold(y_true_discrete, y_pred_discrete, y_bins, threshold=0):
 
 
 def expected_value(y_pred_discrete, y_bins):
+    y_bin_centers = np.zeros(y_bins.size)
+    y_bin_centers[:-1] = 0.5 * (y_bins[:-1] + y_bins[1:])
+    y_bin_centers[-1] = y_bins[-1]
     return np.sum(y_pred_discrete * y_bins, axis=1)
 
 
