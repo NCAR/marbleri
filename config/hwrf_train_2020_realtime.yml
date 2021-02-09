@@ -1,19 +1,13 @@
-data_modes: ["train", "val", "test"]
+data_modes: ["train", "test"]
 
 hwrf_data_paths:
   train: "/glade/p/ral/nsap/rozoff/hfip/reforecast_h220_rotated/"
-  val: "/glade/p/ral/nsap/rozoff/hfip/reforecast_h220_rotated/"
   test: "/glade/p/ral/nsap/rozoff/hfip/realtime_h220_rotated/"
 best_track_data_paths:
   train:
     file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
     file_start: "diag_2020_ref"
     start_date: "2015-01-01"
-    end_date: "2018-12-31"
-  val:
-    file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
-    file_start: "diag_2020_ref"
-    start_date: "2019-01-01"
     end_date: "2019-12-31"
   test:
     file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
@@ -32,8 +26,8 @@ best_track_inputs_dt: ["RMW", "VMAX", "MIN_SLP", "SHR_MAG", "SST", "LAND", "TPW"
 best_track_output: "vmax_bt"
 best_track_output_comparisons: ["VMAX"]
 best_track_scaler: "StandardScaler"
-output_bins: [-40, 40, 5]
-out_path: "/glade/scratch/dgagne/hwrf_2020_rt_output_20210128/"
+output_bins: [-42.5, 42.5, 5]
+out_path: "/glade/scratch/dgagne/hwrf_2020_rt_output_20210208/"
 n_workers: 16
 models:
   random_forest_linear:
