@@ -112,7 +112,7 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                 out_list.append(f"{abs(lon_10):>4d}{lon_dir}")
                 # VMAX
                 if curr_date != bt_storm.iloc[i]["DATE"]:
-                    vmax_curr = int(bt_storm.iloc[i]["VMAX"] - bt_storm.iloc[i]["VMAX_dt_24"])
+                    vmax_curr = int(bt_storm.iloc[i]["VMAX"] - bt_storm.iloc[i][f"VMAX_dt_{time_difference_hours:02d}"])
                     curr_date = bt_storm.iloc[i]["DATE"]
                     vmax_curr += int(round(pred_storm.iloc[i][model_name]))
                 else:
@@ -155,7 +155,7 @@ def output_preds_adeck(pred_df, best_track_df, model_name, model_tech_code, out_
                 # SEAS1 to SEAS4
                 out_list.extend(["    "] * 4)
                 # VMAX DT
-                out_list.append("VMAX_DT_24")
+                out_list.append(f"VMAX_DT_{time_difference_hours:02d}")
                 pred_val = int(round(pred_storm.iloc[i][model_name]))
                 out_list.append(f"{pred_val:3d}")
                 if model_name + "_30" in pred_storm.columns:
