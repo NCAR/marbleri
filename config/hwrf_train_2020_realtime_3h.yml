@@ -1,13 +1,19 @@
-data_modes: ["train", "test"]
+data_modes: ["train", "val", "test"]
 
 hwrf_data_paths:
   train: "/glade/p/ral/nsap/rozoff/hfip/reforecast_h220_rotated/"
+  val: "/glade/p/ral/nsap/rozoff/hfip/reforecast_h220_rotated/"
   test: "/glade/p/ral/nsap/rozoff/hfip/realtime_h220_rotated/"
 best_track_data_paths:
   train:
     file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
     file_start: "diag_2020_ref"
     start_date: "2015-01-01"
+    end_date: "2019-12-31"
+  val:
+    file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
+    file_start: "diag_2020_ref"
+    start_date: "2019-01-01"
     end_date: "2019-12-31"
   test:
     file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
