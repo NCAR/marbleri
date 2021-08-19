@@ -55,6 +55,7 @@ def load_hwrf_norm_file(hwrf_file_name, data_format="channels_first"):
     hwrf_ds.close()
     return conv_inputs
 
+
 class BestTrackSequence(Sequence):
     """
     Generator for HWRF convolutional neural network training.
