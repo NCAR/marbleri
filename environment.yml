@@ -21,6 +21,7 @@ dependencies:
   - jupyter_server
   - numba
   - sphinx
+  - pvlib-python
   - pip:
       - tensorflow
       - tensorflow-probability
