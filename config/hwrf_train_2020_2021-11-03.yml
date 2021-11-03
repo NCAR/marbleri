@@ -36,255 +36,145 @@ output_bins: [-42.5, 42.5, 5]
 out_path: "/glade/scratch/dgagne/hwrf_2020_rt_output_20211103/"
 n_workers: 16
 models:
-  random_forest_linear:
-    model_type: "RandomForestRegressor"
-    input_type: "scalar"
-    output_type: "linear"
-    adeck_name: "MRFL"
-    config:
-      n_estimators: 100
-      max_features: "sqrt"
-      max_depth: 10
-      n_jobs: 16
-  dense_base_linear:
-    model_type: "DenseNeuralNet"
-    input_type: "scalar"
-    output_type: "linear"
-    adeck_name: "MDBL"
-    config:
-      hidden_layers: 2
-      hidden_neurons: 64
-      hidden_activation: "relu"
-      output_type: "linear"
-      batch_size: 128
-      epochs: 20
-      learning_rate: 0.0001
-      verbose: 1
   dense_base_discrete:
     model_type: "DenseNeuralNet"
     input_type: "scalar"
-    output_type: "discrete"
+    output_type: &out "discrete"
     adeck_name: "MDBD"
     config:
-      hidden_layers: 2
-      hidden_neurons: 64
-      hidden_activation: "relu"
-      output_type: "discrete"
+      hidden_layers: &layer 2
+      hidden_neurons: &neurons 64
+      hidden_activation: &act "relu"
+      output_type: *out
+      optimizer: &opt "adam"
       loss: "categorical_crossentropy"
-      batch_size: 128
-      epochs: 20
-      learning_rate: 0.0001
-      verbose: 1
+      batch_size: &batch 128
+      epochs: &epoch 30
+      learning_rate: &lr 0.0001
+      verbose: &verb 1
   dense_focal_discrete:
     model_type: "DenseNeuralNet"
     input_type: "scalar"
     output_type: "discrete"
     adeck_name: "MDFD"
     config:
-      hidden_layers: 2
-      hidden_neurons: 64
-      hidden_activation: "relu"
-      output_type: "discrete"
+      hidden_layers: *layer
+      hidden_neurons: *neurons
+      hidden_activation: *act
+      output_type: *out
+      optimizer: *opt
       loss: "focal"
-      batch_size: 128
-      epochs: 20
-      learning_rate: 0.0001
-      verbose: 1
+      batch_size: *batch
+      epochs: *epoch
+      learning_rate: *lr
+      verbose: *verb
   dense_rps_discrete:
     model_type: "DenseNeuralNet"
     input_type: "scalar"
-    output_type: "discrete"
+    output_type: *out
     adeck_name: "MDRD"
     config:
-      hidden_layers: 2
-      hidden_neurons: 64
-      hidden_activation: "relu"
-      output_type: "discrete"
+      hidden_layers: *layer
+      hidden_neurons: *neurons
+      hidden_activation: *act
+      output_type: *out
+      optimizer: *opt
       loss: "rps"
-      batch_size: 128
-      epochs: 20
-      learning_rate: 0.0001
-      verbose: 1
-
-  conv_base_linear:
-    model_type: "BaseConvNet"
-    input_type: "conv"
-    output_type: "linear"
-    adeck_name: "MCBL"
-    config:
-      min_filters: 16
-      min_data_width: 12
-      pooling_width: 2
-      dense_neurons: 32
-      output_type: "linear"
-      loss: "mse"
-      pooling: "mean"
-      data_format: "channels_last"
-      l2_alpha: 0
-      optimizer: "adam"
-      batch_size: 128
-      use_dropout: 1
-      dropout_alpha: 0.4
-      epochs: 20
-      learning_rate: 0.0001
-      verbose: 1
-  resnet_base_linear:
-    model_type: "ResNet"
-    input_type: "conv"
-    output_type: "linear"
-    adeck_name: "MRBL"
-    config:
-      min_filters: 16
-      min_data_width: 12
-      pooling_width: 2
-      dense_neurons: 32
-      output_type: "linear"
-      loss: "mse"
-      pooling: "mean"
-      data_format: "channels_last"
-      l2_alpha: 0
-      optimizer: "adam"
-      batch_size: 128
-      use_dropout: 1
-      dropout_alpha: 0.4
-      epochs: 20
-      learning_rate: 0.0001
-      verbose: 1
+      batch_size: *batch
+      epochs: *epoch
+      learning_rate: *lr
+      verbose: *verb
   conv_base_discrete:
     model_type: "BaseConvNet"
     input_type: "conv"
-    output_type: "discrete"
+    output_type: *out
     adeck_name: "MCBD"
     config:
-      min_filters: 16
-      min_data_width: 12
-      pooling_width: 2
-      dense_neurons: 32
-      output_type: "discrete"
+      min_filters: &filters 16
+      min_data_width: &min_width 12
+      pooling_width: &pool_width 2
+      hidden_activation: *act
+      dense_neurons: &dense 128
+      pooling: &pool "mean"
+      output_type: *out
       loss: "categorical_crossentropy"
-      pooling: "mean"
-      data_format: "channels_last"
-      l2_alpha: 0
-      optimizer: "adam"
-      batch_size: 128
-      epochs: 20
-      use_dropout: 1
-      dropout_alpha: 0.4
-      learning_rate: 0.0001
-      verbose: 1
+      data_format: &data "channels_last"
+      l2_alpha: &l2 0
+      optimizer: *opt
+      batch_size: *batch
+      epochs: *epoch
+      use_dropout: &dropout 1
+      dropout_alpha: &drop_alpha 0.4
+      learning_rate: *lr
+      verbose: *verb
   conv_focal_discrete:
     model_type: "BaseConvNet"
     input_type: "conv"
     output_type: "discrete"
     adeck_name: "MCFD"
     config:
-      min_filters: 16
-      min_data_width: 12
-      pooling_width: 2
-      dense_neurons: 32
-      hidden_activation: "relu"
-      output_type: "discrete"
+      min_filters: *filters
+      min_data_width: *min_width
+      pooling_width: *pool_width
+      dense_neurons: *dense
+      hidden_activation: *act
+      output_type: *out
       loss: "focal"
-      pooling: "mean"
-      data_format: "channels_last"
-      l2_alpha: 0
-      optimizer: "adam"
-      batch_size: 128
-      use_dropout: 1
-      dropout_alpha: 0.4
-      epochs: 20
-      learning_rate: 0.0001
-      verbose: 1
+      pooling: *pool
+      data_format: *data
+      l2_alpha: *l2
+      optimizer: *opt
+      batch_size: *batch
+      use_dropout: *dropout
+      dropout_alpha: *drop_alpha
+      epochs: *epoch
+      learning_rate: *lr
+      verbose: *verb
     conv_rps_discrete:
       model_type: "BaseConvNet"
       input_type: "conv"
       output_type: "discrete"
       adeck_name: "MCRD"
       config:
-        min_filters: 16
-        min_data_width: 12
-        pooling_width: 2
-        dense_neurons: 32
-        hidden_activation: "relu"
+        min_filters: *filters
+        min_data_width: *min_width
+        pooling_width: *pool_width
+        dense_neurons: *dense
+        hidden_activation: *act
         output_type: "discrete"
         loss: "rps"
-        pooling: "mean"
-        data_format: "channels_last"
-        l2_alpha: 0
-        use_dropout: 1
-        dropout_alpha: 0.4
-        optimizer: "adam"
-        batch_size: 128
-        epochs: 20
-        learning_rate: 0.0001
-        verbose: 1
+        pooling: *pool
+        data_format: *data
+        l2_alpha: *l2
+        use_dropout: *dropout
+        dropout_alpha: *dropout_alpha
+        optimizer: *opt
+        batch_size: *batch
+        epochs: *epoch
+        learning_rate: *lr
+        verbose: *verb
   conv_mixed_discrete:
     model_type: "MixedConvNet"
     input_type: "mixed"
     output_type: "discrete"
     adeck_name: "MCMD"
     config:
-      min_filters: 16
-      min_data_width: 12
-      pooling_width: 2
-      scalar_hidden_layers: 2
-      scalar_hidden_neurons: 64
-      dense_neurons: 32
+      min_filters: *filters
+      min_data_width: *min_width
+      pooling_width: *pool_width
+      scalar_hidden_layers: *layer
+      scalar_hidden_neurons: *neurons
+      dense_neurons: *dense
       output_type: "discrete"
       loss: "categorical_crossentropy"
-      pooling: "mean"
-      data_format: "channels_last"
-      l2_alpha: 0
-      optimizer: "adam"
-      batch_size: 128
-      use_dropout: 1
-      dropout_alpha: 0.4
-      epochs: 20
-      learning_rate: 0.0001
-      verbose: 1
-  resnet_base_discrete:
-    model_type: "ResNet"
-    input_type: "conv"
-    output_type: "discrete"
-    adeck_name: "MRBD"
-    config:
-      min_filters: 16
-      min_data_width: 12
-      pooling_width: 2
-      dense_neurons: 32
-      output_type: "discrete"
-      loss: "categorical_crossentropy"
-      pooling: "mean"
-      data_format: "channels_last"
-      l2_alpha: 0
-      optimizer: "adam"
-      batch_size: 128
-      use_dropout: 1
-      dropout_alpha: 0.4
-      epochs: 20
-      learning_rate: 0.0001
-      verbose: 1
-  resnet_focal_discrete:
-    model_type: "ResNet"
-    input_type: "conv"
-    output_type: "discrete"
-    adeck_name: "MRFD"
-    config:
-      min_filters: 16
-      min_data_width: 12
-      pooling_width: 2
-      dense_neurons: 32
-      output_type: "discrete"
-      loss: "focal"
-      pooling: "mean"
-      data_format: "channels_last"
-      l2_alpha: 0
-      optimizer: "adam"
-      batch_size: 128
-      use_dropout: 1
-      dropout_alpha: 0.4
-      epochs: 20
-      learning_rate: 0.0001
-      verbose: 1
-
+      pooling: *pool
+      data_format: *data
+      l2_alpha: *l2
+      optimizer: *opt
+      batch_size: *batch
+      use_dropout: *dropout
+      dropout_alpha: *dropout_alpha
+      epochs: *epoch
+      learning_rate: *lr
+      verbose: *verb
 
