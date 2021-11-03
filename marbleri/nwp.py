@@ -141,6 +141,7 @@ class BestTrackNetCDF(object):
         forecast_hours = pd.TimedeltaIndex(self.bt_ds["TIME"], unit="hours")
         valid_dates = run_dates.values.reshape(1, -1) + forecast_hours.values.reshape(-1, 1)
         self.bt_ds[valid_time_name] = xr.DataArray(valid_dates, dims=("time", "run"), name=valid_time_name)
+        self.zenith()
         return
 
     def get_storm_variables(self, variables, run_date, storm_name, storm_number, basin, forecast_hour):
