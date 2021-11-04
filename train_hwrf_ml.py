@@ -65,6 +65,7 @@ def main():
         best_track_nc[mode].calc_time_differences([config["best_track_output"]], config["time_difference_hours"])
         best_track_df[mode] = best_track_nc[mode].to_dataframe(best_track_inputs_static +
                                                                best_track_inputs_dt + [output_field])
+        best_track_df[mode].to_csv(join(out_path, f"best_track_{mode}.csv"))
         all_meta_columns = best_track_nc[mode].run_columns + best_track_nc[mode].meta_columns
         best_track_meta[mode] = best_track_df[mode][all_meta_columns]
         best_track_output_discrete[mode] = discretize_output(best_track_df[mode][output_field].values, output_bins)
