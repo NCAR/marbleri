@@ -31,11 +31,13 @@ def main():
     hwrf_data_paths = config["hwrf_data_paths"]
     # Initialize GPU memory
     gpus = tf.config.experimental.list_physical_devices('GPU')
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
+    if len(gpus) > 0:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
     data_modes = config["data_modes"]
     conv_subset = config["conv_inputs"]["subset"]
     out_path = config["out_path"]
+    any_conv_models = any([(model_config["input_type"] == "conv") or (model_config["input_type"] == "mixed") for model_config in config["models"].values()])
     best_track_nc = {}
     best_track_df = {}
     dt = config["time_difference_hours"]
@@ -52,9 +54,6 @@ def main():
                             config["output_bins"][2])
     best_track_output_discrete = {}
     best_track_meta = {}
-    best_track_scaler = scaler_classes[config["best_track_scaler"]]()
-    cluster = LocalCluster(n_workers=config["n_workers"], threads_per_worker=1)
-    client = Client(cluster)
     conv_scale_values = None
     for mode in data_modes:
         print("Loading " + mode)
@@ -67,66 +66,79 @@ def main():
         best_track_meta[mode] = best_track_df[mode][all_meta_columns]
         if mode == "train":
             best_track_input_norm[mode] = pd.DataFrame(best_track_scaler.fit_transform(
-                best_track_df[mode][best_track_inputs_ml]), columns=best_track_inputs_ml)
+                best_track_df[mode][best_track_inputs_ml].values), columns=best_track_inputs_ml)
         else:
             best_track_input_norm[mode] = pd.DataFrame(best_track_scaler.transform(
-                best_track_df[mode][best_track_inputs_ml]), columns=best_track_inputs_ml)
+                best_track_df[mode][best_track_inputs_ml].values), columns=best_track_inputs_ml)
         best_track_output_discrete[mode] = discretize_output(best_track_df[mode][output_field].values, output_bins)
         print(best_track_df[mode])
-        hwrf_filenames_start, hwrf_filenames_end = get_hwrf_filenames_diff(best_track_df[mode],
-                                                                           hwrf_data_paths[mode],
-                                                                           diff=config["time_difference_hours"])
-        print(hwrf_filenames_start[0], hwrf_filenames_end[0])
-        hwrf_files_se = np.vstack([hwrf_filenames_start, hwrf_filenames_end]).T
-        hwrf_field_data[mode] = load_hwrf_data_distributed(hwrf_files_se, input_var_levels, client, subset=conv_subset)
-        if np.any(np.isnan(hwrf_field_data[mode])):
-            print("nans:", np.where(np.isnan(hwrf_field_data[mode])))
-        print("Normalize " + mode)
-        hwrf_norm_data[mode], \
-        conv_scale_values = normalize_hwrf_loaded_data(hwrf_field_data[mode],
-                                                  input_var_levels,
-                                                  scale_format=config["conv_inputs"]["scale_format"],
-                                                  scale_values=conv_scale_values)
-        print(conv_scale_values)
+    if any_conv_models:
+        conv_scale_values = []
+        cluster = LocalCluster(n_workers=config["n_workers"], threads_per_worker=1)
+        client = Client(cluster)
+        for mode in data_modes:
+            hwrf_filenames_start, hwrf_filenames_end = get_hwrf_filenames_diff(best_track_df[mode],
+                                                                            hwrf_data_paths[mode],
+                                                                            diff=config["time_difference_hours"])
+            print(hwrf_filenames_start[0], hwrf_filenames_end[0])
+            hwrf_files_se = np.vstack([hwrf_filenames_start, hwrf_filenames_end]).T
+            hwrf_field_data[mode] = load_hwrf_data_distributed(hwrf_files_se, input_var_levels, client, subset=conv_subset)
+            if np.any(np.isnan(hwrf_field_data[mode])):
+                print("nans:", np.where(np.isnan(hwrf_field_data[mode])))
+            # print("Normalize " + mode)
+            # hwrf_norm_data[mode], \
+            # conv_scale_values = normalize_hwrf_loaded_data(hwrf_field_data[mode],
+            #                                        input_var_levels,
+            #                                        scale_format=config["conv_inputs"]["scale_format"],
+            #                                        scale_values=conv_scale_values)
+            # print(conv_scale_values)
     if not exists(out_path):
         os.makedirs(out_path)
-    if conv_scale_values is not None:
-        conv_scale_values.to_csv(join(out_path, "hwrf_conv_scale_values.csv"))
-    with open(join(out_path, "best_track_scaler.pkl"), "wb") as scaler_pickle:
-        pickle.dump(best_track_scaler, scaler_pickle)
+    #if conv_scale_values is not None:
+    #    conv_scale_values.to_csv(join(out_path, "hwrf_conv_scale_values.csv"))
     model_objects = {}
+    for model_name in config["models"].keys():
+        model_objects[model_name] = []
     if args.train:
         print("Begin training")
-        for model_name, model_config in config["models"].items():
-            print("Training", model_name)
-            model_objects[model_name] = all_models[model_config["model_type"]](**model_config["config"])
+        forecast_hours = np.unique(best_track_df["train"]["TIME"])
+        best_track_scalers = [scaler_classes[config["best_track_scaler"]]() for fh in forecast_hours]
+        print("Forecast Hours: ", forecast_hours)
+        for f, forecast_hour in enumerate(forecast_hours):
+            fh_indices = best_track_df["HOUR"] == forecast_hour
+            best_track_in_hour_norm = pd.DataFrame(best_track_scalers[f].fit_transform(best_track_df.loc[fh_indices, 
+                                                                                       best_track_inputs_ml].values), 
+                                                   columns=best_track_inputs_ml)
+            if any_conv_models:
+                conv_scale_values[-1] = None
+                hwrf_norm_hour, conv_scale_values[-1] = normalize_hwrf_loaded_data(hwrf_field_data["train"][fh_indices], input_var_levels, 
+                                                                                   scale_format=config["conv_inputs"]["scale_format"],
+                                                                                   scale_values=conv_scale_values[-1])
             if model_config["output_type"] == "linear":
-                y_train = best_track_df["train"][output_field].values
-                y_val = best_track_df["val"][output_field].values
-            else:
-                y_train = best_track_output_discrete["train"]
-                y_val = best_track_output_discrete["val"]
-            print(y_train)
-            print(model_config["input_type"])
-            if model_config["input_type"] == "conv":
-                model_objects[model_name].fit(hwrf_norm_data["train"], y_train, val_x=hwrf_norm_data["val"],
-                                              val_y=y_val)
-            elif model_config["input_type"] == "scalar":
-                model_objects[model_name].fit(best_track_input_norm["train"].values, y_train)
-            elif model_config["input_type"] == "mixed":
-                model_objects[model_name].fit((best_track_input_norm["train"].values,
-                                               hwrf_norm_data["train"]), y_train,
-                                              val_x=(best_track_input_norm["val"].values,
-                                                     hwrf_norm_data["val"]),
-                                              val_y=y_val)
-            print("Saving", model_name)
-            if model_config["model_type"] == "RandomForestRegressor":
-                with open(join(out_path, model_name + ".pkl"), "wb") as out_pickle:
-                    pickle.dump(model_objects[model_name], out_pickle)
-            else:
-                tf.keras.models.save_model(model_objects[model_name].model_,
-                                           join(out_path, model_name + ".h5"),
-                                           save_format="h5")
+                    y_train = best_track_df["train"].loc[fh_indices, output_field].values
+                    y_val = best_track_df["val"].loc[fh_indices, output_field].values
+                else:
+                    y_train = best_track_output_discrete["train"].loc[fh_indices].values
+                    y_val = best_track_output_discrete["val"].loc[fh_indices].values
+            
+            for model_name, model_config in config["models"].items():
+                print("Training", model_name, forecast_hour)
+                model_objects[model_name].append(all_models[model_config["model_type"]](**model_config["config"]))
+                if model_config["input_type"] == "conv":
+                    model_objects[model_name][-1].fit(hwrf_norm_hour, y_train)
+                elif model_config["input_type"] == "scalar":
+                    model_objects[model_name][-1].fit(best_track_in_hour_norm.values, y_train)
+                elif model_config["input_type"] == "mixed":
+                    model_objects[model_name][-1].fit((best_track_in_hour_norm.values,
+                                                      hwrf_norm_hour), y_train)
+                print("Saving", model_name)
+                if model_config["model_type"] == "RandomForestRegressor":
+                    with open(join(out_path, f"{model_name}_f{forecast_hour:03d}.pkl"), "wb") as out_pickle:
+                        pickle.dump(model_objects[model_name][-1], out_pickle)
+                else:
+                    tf.keras.models.save_model(model_objects[model_name].model_,
+                                            join(out_path, f"{model_name}_f{forecast_hour:03d}.h5"),
+                                            save_format="h5")
             for mode in data_modes:
                 if model_config["input_type"] == "scalar":
                     y_pred = model_objects[model_name].predict(best_track_input_norm[mode].values)

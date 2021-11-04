@@ -140,7 +140,7 @@ class BestTrackNetCDF(object):
         run_dates = pd.DatetimeIndex(self.bt_ds["DATE"].to_series().str.decode("utf-8") + "00", tz="UTC")
         forecast_hours = pd.TimedeltaIndex(self.bt_ds["TIME"], unit="hours")
         valid_dates = run_dates.values.reshape(-1, 1) + forecast_hours.values.reshape(1, -1)
-        self.bt_ds[valid_time_name] = xr.DataArray(valid_dates, dims=("time", "run"), name=valid_time_name)
+        self.bt_ds[valid_time_name] = xr.DataArray(valid_dates.T, dims=("time", "run"), name=valid_time_name)
         self.zenith()
         return
 

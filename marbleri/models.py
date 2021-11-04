@@ -1,18 +1,17 @@
-import tensorflow as tf
 from tensorflow.keras.layers import Dense, Conv2D, Activation, Input, Flatten, AveragePooling2D, MaxPool2D, LeakyReLU, Dropout, Add
 from tensorflow.keras.layers import BatchNormalization, Concatenate, Layer, SpatialDropout2D
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam, SGD
 from tensorflow.keras.losses import binary_crossentropy, categorical_crossentropy, mean_squared_error, mean_absolute_error
 from tensorflow.keras.regularizers import l2
-import numpy as np
 import tensorflow.keras.backend as K
 import tensorflow_probability as tfp
+import tensorflow as tf
 tfd = tfp.distributions
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LogisticRegression
 from scipy.special import lambertw
-
+import numpy as np
 
 class NormOut(Layer):
     def __init__(self, **kwargs):
@@ -164,9 +163,9 @@ class DenseNeuralNet(object):
         Compile the model in tensorflow with the right optimizer and loss function.
         """
         if self.optimizer == "adam":
-            opt = Adam(lr=self.learning_rate)
+            opt = Adam(learning_rate=self.learning_rate)
         else:
-            opt = SGD(lr=self.learning_rate, momentum=0.99)
+            opt = SGD(learning_rate=self.learning_rate, momentum=0.99)
         self.model_.compile(opt, self.loss, metrics=self.metrics)
 
     @staticmethod
@@ -291,9 +290,9 @@ class BaseConvNet(object):
         Compile the model in tensorflow with the right optimizer and loss function.
         """
         if self.optimizer == "adam":
-            opt = Adam(lr=self.learning_rate)
+            opt = Adam(learning_rate=self.learning_rate)
         else:
-            opt = SGD(lr=self.learning_rate, momentum=0.99)
+            opt = SGD(learning_rate=self.learning_rate, momentum=0.99)
         self.model_.compile(opt, losses[self.loss], metrics=self.metrics)
 
     @staticmethod
@@ -480,9 +479,9 @@ class MixedConvNet(object):
         Compile the model in tensorflow with the right optimizer and loss function.
         """
         if self.optimizer == "adam":
-            opt = Adam(lr=self.learning_rate)
+            opt = Adam(learning_rate=self.learning_rate)
         else:
-            opt = SGD(lr=self.learning_rate, momentum=0.99)
+            opt = SGD(learning_rate=self.learning_rate, momentum=0.99)
         self.model_.compile(opt, losses[self.loss], metrics=self.metrics)
 
     @staticmethod

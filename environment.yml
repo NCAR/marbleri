@@ -23,6 +23,7 @@ dependencies:
   - sphinx
   - pvlib-python
   - pip:
-      - tensorflow
-      - tensorflow-probability
+      - tensorflow==2.5.0
+      - keras==2.6.0
+      - tensorflow-probability==0.13.0
       - .

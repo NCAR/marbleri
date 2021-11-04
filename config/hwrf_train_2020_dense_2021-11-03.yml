@@ -1,0 +1,87 @@
+data_modes: ["train", "val", "test"]
+
+hwrf_data_paths:
+  train: "/glade/p/ral/nsap/rozoff/hfip/reforecast_h220_rotated/"
+  val: "/glade/p/ral/nsap/rozoff/hfip/reforecast_h220_rotated/"
+  test: "/glade/p/ral/nsap/rozoff/hfip/realtime_h220_rotated/"
+best_track_data_paths:
+  train:
+    file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
+    file_start: "diag_2020_ref"
+    start_date: "2015-01-01"
+    end_date: "2019-12-31"
+  val:
+    file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
+    file_start: "diag_2020_ref"
+    start_date: "2019-01-01"
+    end_date: "2019-12-31"
+  test:
+    file_path: "/glade/p/cisl/aiml/dgagne/besttrack_predictors/"
+    file_start: "diag_2020_rt"
+    start_date: "2020-01-01"
+    end_date: "2020-12-31"
+time_difference_hours: 24
+conv_inputs:
+  variables: ["THETA_E", "U_RAD", "V_TAN"]
+  levels: [20000, 50000, 85000, "surface"]
+  scale_format: "standard"
+  subset: [15, 111]
+best_track_inputs_static: ["LAND", "TIME", "INIT_HOUR", "ZENITH"]
+best_track_inputs_dt: ["RMW", "VMAX", "MIN_SLP", "SHR_MAG", "SST", "LAND", "TPW", "TANG850",
+                    "VORT850", "DVRG200", "STM_SPD", "RHLO", "RHMD", "RHHI", "INST1", "INST2"]
+best_track_output: "vmax_bt"
+best_track_output_comparisons: ["VMAX"]
+best_track_scaler: "StandardScaler"
+output_bins: [-42.5, 42.5, 5]
+out_path: "/glade/scratch/dgagne/hwrf_2020_rt_output_20211103/"
+n_workers: 16
+models:
+  dense_base_discrete:
+    model_type: "DenseNeuralNet"
+    input_type: "scalar"
+    output_type: &out "discrete"
+    adeck_name: "MDBD"
+    config:
+      hidden_layers: &layer 2
+      hidden_neurons: &neurons 64
+      hidden_activation: &act "relu"
+      output_type: *out
+      optimizer: &opt "adam"
+      loss: "categorical_crossentropy"
+      batch_size: &batch 128
+      epochs: &epoch 30
+      learning_rate: &lr 0.0001
+      verbose: &verb 1
+  dense_focal_discrete:
+    model_type: "DenseNeuralNet"
+    input_type: "scalar"
+    output_type: "discrete"
+    adeck_name: "MDFD"
+    config:
+      hidden_layers: *layer
+      hidden_neurons: *neurons
+      hidden_activation: *act
+      output_type: *out
+      optimizer: *opt
+      loss: "focal"
+      batch_size: *batch
+      epochs: *epoch
+      learning_rate: *lr
+      verbose: *verb
+  dense_rps_discrete:
+    model_type: "DenseNeuralNet"
+    input_type: "scalar"
+    output_type: *out
+    adeck_name: "MDRD"
+    config:
+      hidden_layers: *layer
+      hidden_neurons: *neurons
+      hidden_activation: *act
+      output_type: *out
+      optimizer: *opt
+      loss: "rps"
+      batch_size: *batch
+      epochs: *epoch
+      learning_rate: *lr
+      verbose: *verb
+
