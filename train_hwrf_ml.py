@@ -55,6 +55,8 @@ def main():
                             config["output_bins"][1] + config["output_bins"][2],
                             config["output_bins"][2])
 
+    if not exists(out_path):
+        os.makedirs(out_path)
     best_track_output_discrete = {}
     best_track_meta = {}
     conv_scale_values = None
@@ -91,8 +93,6 @@ def main():
             #                                        scale_format=config["conv_inputs"]["scale_format"],
             #                                        scale_values=conv_scale_values)
             # print(conv_scale_values)
-    if not exists(out_path):
-        os.makedirs(out_path)
     # if conv_scale_values is not None:
     #    conv_scale_values.to_csv(join(out_path, "hwrf_conv_scale_values.csv"))
     model_objects = {}
@@ -104,7 +104,7 @@ def main():
         best_track_scalers = [scaler_classes[config["best_track_scaler"]]() for fh in forecast_hours]
         print("Forecast Hours: ", forecast_hours)
         for f, forecast_hour in enumerate(forecast_hours):
-            fh_indices = best_track_df["train"]["HOUR"] == forecast_hour
+            fh_indices = best_track_df["train"]["TIME"] == forecast_hour
             best_track_in_hour_norm = pd.DataFrame(best_track_scalers[f].
                                                    fit_transform(best_track_df["train"].loc[fh_indices,
                                                                                             best_track_inputs_ml].values),
@@ -121,10 +121,8 @@ def main():
             for model_name, model_config in config["models"].items():
                 if model_config["output_type"] == "linear":
                     y_train = best_track_df["train"].loc[fh_indices, output_field].values
-                    y_val = best_track_df["val"].loc[fh_indices, output_field].values
                 else:
-                    y_train = best_track_output_discrete["train"].loc[fh_indices].values
-                    y_val = best_track_output_discrete["val"].loc[fh_indices].values
+                    y_train = best_track_output_discrete["train"][fh_indices]
                 print("Training", model_name, forecast_hour)
                 model_objects[model_name].append(all_models[model_config["model_type"]](**model_config["config"]))
                 if model_config["input_type"] == "conv":
@@ -165,7 +163,7 @@ def main():
 
             for f, forecast_hour in enumerate(forecast_hours):
                 print(f"Validating f{forecast_hour:03d}")
-                fh_indices = best_track_df[mode]["HOUR"] == forecast_hour
+                fh_indices = best_track_df[mode]["TIME"] == forecast_hour
                 best_track_in_hour_norm = pd.DataFrame(best_track_scalers[f].
                                                        transform(best_track_df[mode].loc[fh_indices,
                                                                                          best_track_inputs_ml].values),
@@ -202,7 +200,7 @@ def main():
                                            index_label="subset")
                 if model_config["output_type"] == "discrete":
                     discrete_model_scores = discrete_metrics(best_track_output_discrete[mode],
-                                                             all_preds[model_name][out_bin_model],
+                                                             all_preds[model_name][out_bin_model].values,
                                                              output_bins,
                                                              best_track_meta[mode])
                     print(f"{model_name} {mode} Discrete Scores")

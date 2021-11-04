@@ -113,10 +113,13 @@ class BestTrackNetCDF(object):
         else:
             bt_ds_list = [xr.open_dataset(ds) for ds in self.best_track_files]
             for bt_ds in bt_ds_list:
+                print(bt_ds)
                 for variable in bt_ds.variables.keys():
                     if bt_ds[variable].dims == ("time", "nrun"):
+                        print(variable + " changing")
                         bt_ds[variable] = xr.DataArray(bt_ds[variable], dims=("time", "run"))
-            self.bt_ds = xr.concat(bt_ds_list, "run")
+            self.bt_ds = xr.concat(bt_ds_list, "run", data_vars="minimal")
+        print(self.bt_ds)
         self.bt_runs = None
         self.run_columns = ["DATE", "STNAM", "STNUM", "BASIN"]
         self.meta_columns = ["INIT_HOUR", "VALID", "TIME", "LON", "LAT", "STM_SPD", "STM_HDG", "LAND", "VMAX"]
@@ -124,6 +127,7 @@ class BestTrackNetCDF(object):
         # the xarray.to_dataframe() function. Changing the dimension from nrun to run fixes the problem.
         for variable in self.bt_ds.variables.keys():
             if self.bt_ds[variable].dims == ("time", "nrun"):
+                print(variable + " is changing dims")
                 self.bt_ds[variable] = xr.DataArray(self.bt_ds[variable], dims=("time", "run"))
         self.bt_runs = self.bt_ds[self.run_columns].to_dataframe()
         for col in self.bt_runs.columns:
@@ -139,8 +143,12 @@ class BestTrackNetCDF(object):
     def valid_times(self, valid_time_name="VALID"):
         run_dates = pd.DatetimeIndex(self.bt_ds["DATE"].to_series().str.decode("utf-8") + "00", tz="UTC")
         forecast_hours = pd.TimedeltaIndex(self.bt_ds["TIME"], unit="hours")
+        print(forecast_hours.shape)
+        print(self.bt_ds["TIME"].shape)
         valid_dates = run_dates.values.reshape(-1, 1) + forecast_hours.values.reshape(1, -1)
-        self.bt_ds[valid_time_name] = xr.DataArray(valid_dates.T, dims=("time", "run"), name=valid_time_name)
+        print(valid_dates.shape)
+        print(valid_dates)
+        self.bt_ds[valid_time_name] = xr.DataArray(valid_dates.T, dims=("time", "run"))
         self.zenith()
         return
 

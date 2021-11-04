@@ -155,7 +155,6 @@ class DenseNeuralNet(object):
         else:
             ann_model = Dense(output_size)(ann_model)
         self.model_ = Model(ann_input, ann_model)
-        print(self.model_.summary())
         return
 
     def compile_model(self):
@@ -244,11 +243,9 @@ class BaseConvNet(object):
         conv_input_layer = Input(shape=conv_input_shape, name="conv_input")
         num_conv_layers = int(np.round((np.log(conv_input_shape[1]) - np.log(self.min_data_width))
                                        / np.log(self.pooling_width)))
-        print("Conv Layers", num_conv_layers)
         num_filters = self.min_filters
         scn_model = conv_input_layer
         for c in range(num_conv_layers):
-            print(conv_input_shape[1] / (self.pooling_width ** c))
             scn_model = Conv2D(num_filters, (self.filter_width, self.filter_width),
                                data_format=self.data_format,
                                kernel_regularizer=reg, padding="same", name="conv_{0:02d}".format(c))(scn_model)
@@ -283,7 +280,6 @@ class BaseConvNet(object):
         else:
             scn_model = Dense(output_size, name="dense_output")(scn_model)
         self.model_ = Model(conv_input_layer, scn_model)
-        print(self.model_.summary())
 
     def compile_model(self):
         """
@@ -416,8 +412,6 @@ class MixedConvNet(object):
             conv_input_shape (tuple of shape [variable, y, x]): The shape of the input data
             output_size: Number of neurons in output layer.
         """
-        print("Scalar input shape", scalar_input_shape)
-        print("Conv input shape", conv_input_shape)
         if self.use_l2:
             reg = l2(self.l2_alpha)
         else:
@@ -472,7 +466,6 @@ class MixedConvNet(object):
         else:    
             scn_model = Dense(output_size, name="dense_output")(scn_model)
         self.model_ = Model([scalar_input_layer, conv_input_layer], scn_model)
-        print(self.model_.summary())
 
     def compile_model(self):
         """
@@ -592,7 +585,6 @@ class ResNet(BaseConvNet):
         return out
 
     def build_network(self, conv_input_shape, output_size):
-        print(conv_input_shape)
         if self.use_l2:
             reg = l2(self.l2_alpha)
         else:
@@ -632,7 +624,6 @@ class ResNet(BaseConvNet):
             num_mixtures = int(self.output_type.split("_")[1])
             res_model = GaussianMixtureOut(mixtures=num_mixtures)(res_model)
         self.model_ = Model(conv_input_layer, res_model)
-        print(self.model_.summary())
 
 
 all_models = {"BaseConvNet": BaseConvNet,
