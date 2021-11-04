@@ -93,7 +93,7 @@ def absolute_error_percentile(y_true, y_pred, percentile=67):
 
 
 def exceedance_probability(y_discrete, y_bins, threshold):
-    b_index = np.searchsorted(y_bins, threshold)
+    b_index = np.searchsorted(y_bins, threshold) - 1
     return y_discrete[:, b_index:].sum(axis=1)
 
 
@@ -131,6 +131,6 @@ def expected_value(y_pred_discrete, y_bins):
     y_bin_centers = np.zeros(y_bins.size)
     y_bin_centers[:-1] = 0.5 * (y_bins[:-1] + y_bins[1:])
     y_bin_centers[-1] = y_bins[-1]
-    return np.sum(y_pred_discrete * y_bins, axis=1)
+    return np.sum(y_pred_discrete * y_bin_centers, axis=1)
 
 

@@ -154,7 +154,7 @@ def main():
                     all_preds[model_name].loc[:, output_field] = best_track_df[mode][output_field].values
 
                 else:
-                    out_bin_model = [f"{model_name}_{o_bin:02.0f}" for o_bin in output_bins[::-1]]
+                    out_bin_model = [f"{model_name}_{o_bin:02.1f}" for o_bin in output_bins]
                     cols = [output_field, model_name] + out_bin_model
                     all_preds[model_name] = pd.DataFrame(0.0,
                                                          columns=cols,
@@ -175,7 +175,7 @@ def main():
                 else:
                     hwrf_norm_hour = None
                 for model_name, model_config in config["models"].items():
-                    out_bin_model = [f"{model_name}_{o_bin:02.0f}" for o_bin in output_bins[::-1]]
+                    out_bin_model = [f"{model_name}_{o_bin:02.1f}" for o_bin in output_bins]
                     if model_config["input_type"] == "conv":
                         y_pred = model_objects[model_name][f].predict(hwrf_norm_hour)
                     elif model_config["input_type"] == "mixed":
@@ -190,7 +190,7 @@ def main():
                         all_preds[model_name].loc[fh_indices, model_name] = y_pred_linear
                         all_preds[model_name].loc[fh_indices, out_bin_model] = y_pred
             for model_name, model_config in config["models"].items():
-                out_bin_model = [f"{model_name}_{o_bin:02.0f}" for o_bin in output_bins[::-1]]
+                out_bin_model = [f"{model_name}_{o_bin:02.1f}" for o_bin in output_bins]
                 linear_model_scores = linear_metrics(all_preds[model_name][output_field].values,
                                                      all_preds[model_name][model_name].values,
                                                      best_track_meta[mode])
