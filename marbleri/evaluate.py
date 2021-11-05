@@ -18,7 +18,7 @@ def linear_metrics(y_true, y_pred, meta):
     for basin in basins:
         for forecast_hour in forecast_hours:
             subsets.append(f"{basin}_f{forecast_hour:03d}")
-    all_scores = pd.DataFrame(0, index=subsets, columns=list(metric_set.keys()) + ["Count"])
+    all_scores = pd.DataFrame(0.0, index=subsets, columns=list(metric_set.keys()) + ["Count"])
     for metric, metric_fun in metric_set.items():
         all_scores.loc["all", metric] = metric_fun(y_true, y_pred)
         all_scores.loc["all", "Count"] = y_true.size
@@ -40,17 +40,25 @@ def discrete_metrics(y_true_discrete, y_pred_discrete, y_bins, meta):
                   "BS_0": partial(brier_score_threshold, threshold=0),
                   "BS_20": partial(brier_score_threshold, threshold=20),
                   "BS_30": partial(brier_score_threshold, threshold=30),
+                  "BS_35": partial(brier_score_threshold, threshold=35),
+                  "BSS_0": partial(brier_skill_score_threshold, threshold=0),
+                  "BSS_20": partial(brier_skill_score_threshold, threshold=20),
+                  "BSS_30": partial(brier_skill_score_threshold, threshold=30),
+                  "BSS_35": partial(brier_skill_score_threshold, threshold=35),
                   "AUC_0": partial(auc_threshold, threshold=0),
                   "AUC_20": partial(auc_threshold, threshold=20),
-                  "AUC_30": partial(auc_threshold, threshold=30)}
+                  "AUC_30": partial(auc_threshold, threshold=30),
+                  "AUC_35": partial(auc_threshold, threshold=35)}
     subsets = ["all"]
     basins = np.unique(meta["BASIN"])
     forecast_hours = np.unique(meta["TIME"])
     for basin in basins:
         for forecast_hour in forecast_hours:
             subsets.append(f"{basin}_f{forecast_hour:03d}")
-    all_scores = pd.DataFrame(0, index=subsets, columns=list(metric_set.keys()) + ["Count"])
+    all_scores = pd.DataFrame(0.0, index=subsets, columns=list(metric_set.keys()) + ["Count"])
     for metric, metric_fun in metric_set.items():
+        print(metric)
+        print(metric_fun(y_true_discrete, y_pred_discrete, y_bins))
         all_scores.loc["all", metric] = metric_fun(y_true_discrete, y_pred_discrete, y_bins)
         all_scores.loc["all", "Count"] = y_true_discrete.shape[0]
     for basin in basins:
@@ -85,7 +93,7 @@ def absolute_error_percentile(y_true, y_pred, percentile=67):
 
 
 def exceedance_probability(y_discrete, y_bins, threshold):
-    b_index = np.searchsorted(y_bins, threshold)
+    b_index = np.searchsorted(y_bins, threshold) - 1
     return y_discrete[:, b_index:].sum(axis=1)
 
 
@@ -99,6 +107,14 @@ def brier_score_threshold(y_true_discrete, y_pred_discrete, y_bins, threshold=0)
     y_pred_prob = exceedance_probability(y_pred_discrete, y_bins, threshold)
     y_true = exceedance_probability(y_true_discrete, y_bins, threshold)
     return np.mean((y_pred_prob - y_true) ** 2)
+
+
+def brier_skill_score_threshold(y_true_discrete, y_pred_discrete, y_bins, threshold=0):
+    y_pred_prob = exceedance_probability(y_pred_discrete, y_bins, threshold)
+    y_true = exceedance_probability(y_true_discrete, y_bins, threshold)
+    bs = np.mean((y_pred_prob - y_true) ** 2)
+    bs_c = np.mean((y_true.mean() - y_true) ** 2)
+    return 1 - bs / bs_c
 
 
 def auc_threshold(y_true_discrete, y_pred_discrete, y_bins, threshold=0):
@@ -115,6 +131,6 @@ def expected_value(y_pred_discrete, y_bins):
     y_bin_centers = np.zeros(y_bins.size)
     y_bin_centers[:-1] = 0.5 * (y_bins[:-1] + y_bins[1:])
     y_bin_centers[-1] = y_bins[-1]
-    return np.sum(y_pred_discrete * y_bins, axis=1)
+    return np.sum(y_pred_discrete * y_bin_centers, axis=1)
 
 

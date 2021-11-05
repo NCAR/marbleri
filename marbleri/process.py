@@ -326,7 +326,7 @@ def par_minmax_scale(x, min_val, max_val):
     r_val = 1.0 / (max_val - min_val)
     return (x - min_val) * r_val
 
-def normalize_hwrf_loaded_data(hwrf_field_data, var_levels, scale_format="standard", scale_values=None):
+def normalize_hwrf(hwrf_field_data, var_levels, scale_format="standard", scale_values=None):
     hwrf_norm_data = np.zeros(hwrf_field_data.shape, dtype=hwrf_field_data.dtype)
     var_level_str = get_var_level_strings(var_levels)
     if scale_format == "standard":

@@ -1,18 +1,17 @@
-import tensorflow as tf
 from tensorflow.keras.layers import Dense, Conv2D, Activation, Input, Flatten, AveragePooling2D, MaxPool2D, LeakyReLU, Dropout, Add
 from tensorflow.keras.layers import BatchNormalization, Concatenate, Layer, SpatialDropout2D
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam, SGD
 from tensorflow.keras.losses import binary_crossentropy, categorical_crossentropy, mean_squared_error, mean_absolute_error
 from tensorflow.keras.regularizers import l2
-import numpy as np
 import tensorflow.keras.backend as K
 import tensorflow_probability as tfp
+import tensorflow as tf
 tfd = tfp.distributions
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LogisticRegression
 from scipy.special import lambertw
-
+import numpy as np
 
 class NormOut(Layer):
     def __init__(self, **kwargs):
@@ -156,7 +155,6 @@ class DenseNeuralNet(object):
         else:
             ann_model = Dense(output_size)(ann_model)
         self.model_ = Model(ann_input, ann_model)
-        print(self.model_.summary())
         return
 
     def compile_model(self):
@@ -164,9 +162,9 @@ class DenseNeuralNet(object):
         Compile the model in tensorflow with the right optimizer and loss function.
         """
         if self.optimizer == "adam":
-            opt = Adam(lr=self.learning_rate)
+            opt = Adam(learning_rate=self.learning_rate)
         else:
-            opt = SGD(lr=self.learning_rate, momentum=0.99)
+            opt = SGD(learning_rate=self.learning_rate, momentum=0.99)
         self.model_.compile(opt, self.loss, metrics=self.metrics)
 
     @staticmethod
@@ -245,11 +243,9 @@ class BaseConvNet(object):
         conv_input_layer = Input(shape=conv_input_shape, name="conv_input")
         num_conv_layers = int(np.round((np.log(conv_input_shape[1]) - np.log(self.min_data_width))
                                        / np.log(self.pooling_width)))
-        print("Conv Layers", num_conv_layers)
         num_filters = self.min_filters
         scn_model = conv_input_layer
         for c in range(num_conv_layers):
-            print(conv_input_shape[1] / (self.pooling_width ** c))
             scn_model = Conv2D(num_filters, (self.filter_width, self.filter_width),
                                data_format=self.data_format,
                                kernel_regularizer=reg, padding="same", name="conv_{0:02d}".format(c))(scn_model)
@@ -284,16 +280,15 @@ class BaseConvNet(object):
         else:
             scn_model = Dense(output_size, name="dense_output")(scn_model)
         self.model_ = Model(conv_input_layer, scn_model)
-        print(self.model_.summary())
 
     def compile_model(self):
         """
         Compile the model in tensorflow with the right optimizer and loss function.
         """
         if self.optimizer == "adam":
-            opt = Adam(lr=self.learning_rate)
+            opt = Adam(learning_rate=self.learning_rate)
         else:
-            opt = SGD(lr=self.learning_rate, momentum=0.99)
+            opt = SGD(learning_rate=self.learning_rate, momentum=0.99)
         self.model_.compile(opt, losses[self.loss], metrics=self.metrics)
 
     @staticmethod
@@ -417,8 +412,6 @@ class MixedConvNet(object):
             conv_input_shape (tuple of shape [variable, y, x]): The shape of the input data
             output_size: Number of neurons in output layer.
         """
-        print("Scalar input shape", scalar_input_shape)
-        print("Conv input shape", conv_input_shape)
         if self.use_l2:
             reg = l2(self.l2_alpha)
         else:
@@ -473,16 +466,15 @@ class MixedConvNet(object):
         else:    
             scn_model = Dense(output_size, name="dense_output")(scn_model)
         self.model_ = Model([scalar_input_layer, conv_input_layer], scn_model)
-        print(self.model_.summary())
 
     def compile_model(self):
         """
         Compile the model in tensorflow with the right optimizer and loss function.
         """
         if self.optimizer == "adam":
-            opt = Adam(lr=self.learning_rate)
+            opt = Adam(learning_rate=self.learning_rate)
         else:
-            opt = SGD(lr=self.learning_rate, momentum=0.99)
+            opt = SGD(learning_rate=self.learning_rate, momentum=0.99)
         self.model_.compile(opt, losses[self.loss], metrics=self.metrics)
 
     @staticmethod
@@ -593,7 +585,6 @@ class ResNet(BaseConvNet):
         return out
 
     def build_network(self, conv_input_shape, output_size):
-        print(conv_input_shape)
         if self.use_l2:
             reg = l2(self.l2_alpha)
         else:
@@ -633,7 +624,6 @@ class ResNet(BaseConvNet):
             num_mixtures = int(self.output_type.split("_")[1])
             res_model = GaussianMixtureOut(mixtures=num_mixtures)(res_model)
         self.model_ = Model(conv_input_layer, res_model)
-        print(self.model_.summary())
 
 
 all_models = {"BaseConvNet": BaseConvNet,

@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import re
 from glob import glob
+from pvlib.solarposition import get_solarposition
 
 
 class HWRFStep(object):
@@ -112,17 +113,21 @@ class BestTrackNetCDF(object):
         else:
             bt_ds_list = [xr.open_dataset(ds) for ds in self.best_track_files]
             for bt_ds in bt_ds_list:
+                print(bt_ds)
                 for variable in bt_ds.variables.keys():
                     if bt_ds[variable].dims == ("time", "nrun"):
+                        print(variable + " changing")
                         bt_ds[variable] = xr.DataArray(bt_ds[variable], dims=("time", "run"))
-            self.bt_ds = xr.concat(bt_ds_list, "run")
+            self.bt_ds = xr.concat(bt_ds_list, "run", data_vars="minimal")
+        print(self.bt_ds)
         self.bt_runs = None
         self.run_columns = ["DATE", "STNAM", "STNUM", "BASIN"]
-        self.meta_columns = ["TIME", "LON", "LAT", "STM_SPD", "STM_HDG", "LAND", "VMAX"]
+        self.meta_columns = ["INIT_HOUR", "VALID", "TIME", "LON", "LAT", "STM_SPD", "STM_HDG", "LAND", "VMAX"]
         # Some of the variables have (time, nrun) as the dimensions, which causes problems when trying to use
         # the xarray.to_dataframe() function. Changing the dimension from nrun to run fixes the problem.
         for variable in self.bt_ds.variables.keys():
             if self.bt_ds[variable].dims == ("time", "nrun"):
+                print(variable + " is changing dims")
                 self.bt_ds[variable] = xr.DataArray(self.bt_ds[variable], dims=("time", "run"))
         self.bt_runs = self.bt_ds[self.run_columns].to_dataframe()
         for col in self.bt_runs.columns:
@@ -130,8 +135,22 @@ class BestTrackNetCDF(object):
         run_dates = pd.DatetimeIndex(self.bt_runs["DATE"] + "00")
         run_indices = np.where((run_dates >= self.start_date) & (run_dates <= self.end_date))[0]
         self.bt_ds = self.bt_ds.sel(run=run_indices)
+        self.bt_ds["INIT_HOUR"] = self.bt_ds["DATE"].str[-2:].astype(int)
+        self.valid_times()
         print(self.bt_ds.run)
         self.bt_runs = self.bt_runs.iloc[run_indices].reset_index(drop=True)
+
+    def valid_times(self, valid_time_name="VALID"):
+        run_dates = pd.DatetimeIndex(self.bt_ds["DATE"].to_series().str.decode("utf-8") + "00", tz="UTC")
+        forecast_hours = pd.TimedeltaIndex(self.bt_ds["TIME"], unit="hours")
+        print(forecast_hours.shape)
+        print(self.bt_ds["TIME"].shape)
+        valid_dates = run_dates.values.reshape(-1, 1) + forecast_hours.values.reshape(1, -1)
+        print(valid_dates.shape)
+        print(valid_dates)
+        self.bt_ds[valid_time_name] = xr.DataArray(valid_dates.T, dims=("time", "run"))
+        self.zenith()
+        return
 
     def get_storm_variables(self, variables, run_date, storm_name, storm_number, basin, forecast_hour):
         b_runs = self.bt_runs
@@ -159,7 +178,18 @@ class BestTrackNetCDF(object):
             self.bt_ds[diff_var_name] = xr.DataArray(diff_var, dims=("time", "run"), name=diff_var_name)
         return
 
+    def zenith(self):
+        "Calculate the solar zenith angle for each time and location."
+        solar_pos_data = get_solarposition(self.bt_ds["VALID"].values.ravel(),
+                                           self.bt_ds["LAT"].values.ravel(),
+                                           self.bt_ds["LON"].values.ravel())
+        self.bt_ds["ZENITH"] = xr.DataArray(solar_pos_data["zenith"].values.reshape(self.bt_ds.dims["time"],
+                                                                                    self.bt_ds.dims["run"]),
+                                            dims=("time", "run"), name="ZENITH")
+        return
+
     def to_dataframe(self, variables, dropna=True):
+        """Convert xarray dataset to pandas DataFrame and filter out forecast hours after storm dies."""
         variables_list = list(variables)
         for m in self.meta_columns:
             if m in variables_list:
