@@ -26,11 +26,11 @@ conv_inputs:
   levels: [20000, 50000, 85000, "surface"]
   scale_format: "standard"
   subset: [15, 111]
-best_track_inputs_static: ["LAND", "TIME", "INIT_HOUR", "ZENITH"]
+best_track_inputs_static: ["LAND", "ZENITH"]
 best_track_inputs_dt: ["RMW", "VMAX", "MIN_SLP", "SHR_MAG", "SST", "LAND", "TPW", "TANG850",
-                    "VORT850", "DVRG200", "STM_SPD", "RHLO", "RHMD", "RHHI", "INST1", "INST2"]
+                       "VORT850", "DVRG200", "STM_SPD", "RHLO", "RHMD", "RHHI", "INST1", "INST2"]
 best_track_output: "vmax_bt_new"
-best_track_output_comparisons: ["VMAX"]
+best_track_output_comparisons: ["VMAX_dt_24"]
 best_track_scaler: "StandardScaler"
 output_bins: [-42.5, 42.5, 5]
 out_path: "/glade/scratch/dgagne/hwrf_2020_rt_hour_output_20211104/"
@@ -42,15 +42,15 @@ models:
     output_type: &out "discrete"
     adeck_name: "MDBD"
     config:
-      hidden_layers: &layer 1
-      hidden_neurons: &neurons 128
+      hidden_layers: &layer 2
+      hidden_neurons: &neurons 64
       hidden_activation: &act "relu"
       output_type: *out
       optimizer: &opt "adam"
       loss: "categorical_crossentropy"
-      batch_size: &batch 128
-      epochs: &epoch 50
-      learning_rate: &lr 0.001
+      batch_size: &batch 64
+      epochs: &epoch 100
+      learning_rate: &lr 0.0001
       verbose: &verb 0
   dense_focal_discrete:
     model_type: "DenseNeuralNet"
