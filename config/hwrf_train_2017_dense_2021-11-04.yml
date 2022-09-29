@@ -33,7 +33,7 @@ best_track_output: "vmax_bt_new"
 best_track_output_comparisons: ["VMAX_dt_24"]
 best_track_scaler: "StandardScaler"
 output_bins: [-42.5, 42.5, 5]
-out_path: "/glade/scratch/dgagne/hwrf_2020_rt_hour_output_20211104/"
+out_path: "/glade/work/dgagne/hwrf_2020_rt_hour_output_20211104/"
 n_workers: 16
 models:
   dense_base_discrete:
